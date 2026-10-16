@@ -1,18 +1,21 @@
-# Memivo v0.3.5 Preview
+# Memivo v0.3.6 Preview
 
-## Engine mismatch and diagnostic fixes
+## 圖片匯入與畫布操作
 
-- Reject CUDA jobs before spawning when the managed engine is CPU-only, including detection, segmentation, training and face jobs. Show mismatched device settings in Feature center.
-- Preserve subprocess traceback details and exit codes instead of only reporting a generic engine failure. Write full output under the application data directory's runtimes/logs and retain the latest failure across restarts.
-- Display failure details directly in detection and segmentation workspaces, with engine-configuration and log-folder actions. Failed tasks use a red footer indicator.
-- Add Copy log and Select all actions with selectable read-only text. Enable text selection in the native desktop host; image dragging remains separate. Clipboard fallback selects the text and prompts Ctrl+C.
+- 圖庫、人物相簿、偵測、分割、參考照片及資料集匯入支援圖片拖放；彈窗提供相同流程的檔案選擇入口。每張上限 64 MB，支援多張，原檔保留。
+- 一般工作區拖入圖片會追加至目前圖庫、略過重複內容並選取新圖，保留既有人工審核結果。路徑匯入仍用來開啟獨立來源專案。
+- 原圖 / Result 改為文字與顏色切換按鈕；分割另有黑白遮罩與透明去背快捷按鈕。
+- 獨立「拖動」按鈕，保留滾輪縮放、中鍵／空白鍵平移與重設視角。
+- 分割右鍵刪除附近標記、復原與重做、Esc 取消繪框。標註畫布防止右鍵誤增頂點，支援右鍵撤回頂點或刪除目標及 Delete 刪除選取目標。
+- 加深彩色遮罩，預設疊加強度 80%；不改變匯出黑白遮罩。
+- 分開診斷文字區與開啟日誌資料夾按鈕；移除功能中心硬體卡多餘的兩段介紹。
 
-## Fixing torch +cpu / Invalid CUDA device errors
+## 驗證
 
-An existing CPU engine does not become GPU-enabled after updating the app. Uninstall the visual AI engine in Feature center, select NVIDIA CUDA 12.8, and install. Wait for GPU verification, then select NVIDIA CUDA in Settings. Model weights are retained. Alternatively choose CPU in Settings to test the workflow with the current CPU engine.
+- Python：61 項通過、1 項因 Windows 符號連結權限略過；包含真實本機 HTTP 傳檔、無效圖片與路徑拒絕、重複圖片、追加持久化、人工審核保留及取消匯入。
+- TypeScript、前端正式建構及三語介面檢查。
+- 瀏覽器驗證按鈕切換、標記刪除／復原／重做、拖動／重設及共用檔案選擇匯入流程；結果展示使用明確的測試模型替身，不代表 SAM3 精度驗證。原生 Windows 檔案總管拖放與 RTX GPU 需在目標電腦複驗。
 
-## Validation
+## 更新
 
-57 tests pass, one Windows symlink-permission test is skipped. A real official YOLO26n model was run through the managed-worker path on the existing CPU environment; it returned four objects on a local photo. The CPU/CUDA exception was reproduced with a deliberately mismatched test record to verify complete error capture. Target RTX 5070 Ti inference remains to be tested. Build, localization and diagnostic copy interaction are checked separately.
-
-Extract the complete Memivo-0.3.5-preview-windows-x64.zip, or update source and run start_memivo.bat. Requires external Python 3.10–3.12 and WebView2. GPL-3.0-only applies to original code; corresponding source, LICENSE and NOTICE are included. Third-party terms apply separately.
+模型權重與 AI 引擎不需要重新下載。ZIP 仍為外部 Python / WebView2 依賴版本，包含 GPL 原始碼及授權說明。拖入圖片的本機副本會佔用應用資料目錄空間。

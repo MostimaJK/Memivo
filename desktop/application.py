@@ -95,7 +95,7 @@ class Application:
         path = Path(self.config['workspace']) / 'report.json'
         if path.exists():
             self.report = json.loads(path.read_text(encoding='utf-8'))
-            self.photos = [self.view_photo(p) for p in self.report['photos']]
+            self.photos = [self.view_photo(p,p.get('processed',True)) for p in self.report['photos']]
         elif (Path(self.config['workspace']) / 'library.json').exists():
             records = json.loads((Path(self.config['workspace']) / 'library.json').read_text(encoding='utf-8'))
             self.photos = [self.view_photo(p, p.get('processed', False)) for p in records]
@@ -215,6 +215,8 @@ class Application:
             return self.start_task('卸载可选引擎',lambda:self.runtimes.uninstall(feature))
         if route == 'scan':
             return self.scan(data['path'])
+        if route == 'import-drop':
+            return self.import_drop(data['path'])
         if route == 'recognize':
             return self.recognize()
         if route == 'export':
@@ -351,6 +353,7 @@ class Application:
                 photos.append(self.view_photo(dict(path=str(path), faces=[], error=None), False))
                 self.progress(index+1, len(paths), path.name)
             with self.lock:
+                self.config.pop('input_paths',None)
                 # A new source is a fresh project; avoid importing old human decisions.
                 if str(source) != self.config['source']:
                     self.config['workspace'] = str(self.home / 'projects' / uuid.uuid4().hex[:12])
@@ -360,6 +363,39 @@ class Application:
                 self.persist()
             return f'已导入 {len(photos)} 张照片，可以浏览或开始识别。'
         return self.start_task('导入照片', operation)
+
+    def import_drop(self, folder):
+        source=Path(folder).resolve()
+        if source.parent!=(self.home/'imports').resolve() or not source.is_dir():
+            raise ValueError('拖入图片目录不可用。')
+        def operation():
+            from album.core import fingerprint
+            paths=sorted(p for p in source.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES)
+            if not paths:raise ValueError('请拖入支持的图片文件。')
+            with self.lock:photos=copy.deepcopy(self.photos)
+            seen=set()
+            for photo in photos:
+                if self.cancel.is_set():return '已停止导入，原项目保持不变。'
+                seen.add(photo.get('sha256') or fingerprint(photo['path']))
+            added=0
+            for index,path in enumerate(paths):
+                if self.cancel.is_set():return '已停止导入，原项目保持不变。'
+                key=fingerprint(path)
+                if key not in seen:
+                    photos.append(self.view_photo(dict(path=str(path),faces=[],error=None,sha256=key),False))
+                    seen.add(key);added+=1
+                self.progress(index+1,len(paths),path.name)
+            with self.lock:
+                if self.cancel.is_set():return '已停止导入，原项目保持不变。'
+                if not self.config['source']:self.config['source']=str(source.parent)
+                self.config['input_paths']=[p['path'] for p in photos]
+                self.photos=photos
+                if self.report:
+                    self.report['photos']=copy.deepcopy(photos)
+                    save_json(Path(self.config['workspace'])/'report.json',self.report)
+                self.persist()
+            return f'已追加 {added} 张照片，重复图像已跳过。'
+        return self.start_task('导入照片',operation)
 
     def recognize(self):
         with self.lock:
@@ -586,7 +622,7 @@ class Application:
                 instances.append(dict(cutout=self.register(item_path), crop=self.register(crop_path),
                                       mask=self.register(item_mask_path), bbox=list(bounds)))
             overlay = np.asarray(original).copy()
-            overlay[combined] = (overlay[combined]*.45 + np.array([78,160,255])*.55).astype(np.uint8)
+            overlay[combined] = (overlay[combined]*.3 + np.array([48,114,235])*.7).astype(np.uint8)
             overlay_path = output_dir / 'overlay.png'
             Image.fromarray(overlay).save(overlay_path)
             with self.lock:

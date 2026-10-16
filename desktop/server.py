@@ -5,6 +5,7 @@ import json
 import mimetypes
 import secrets
 import threading
+import uuid
 from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -96,10 +97,44 @@ def create_server(application=None, port=0):
                 return self.json({'error':'会话验证失败'}, 403)
             try:
                 length = int(self.headers.get('Content-Length', 0))
+                route = parsed.path.removeprefix('/api/')
+                if route == 'upload-image':
+                    from album.core import IMAGE_SUFFIXES
+                    from PIL import Image
+                    values=parse_qs(parsed.query)
+                    name=values.get('name',[''])[0]
+                    if not 0 < length <= 64*1024*1024:
+                        raise ValueError('单张拖入图片不能超过 64 MB。')
+                    try:
+                        if not name or any(c in name for c in '/\\:<>"|?*') or name.endswith((' ','.')) or Path(name).suffix.lower() not in IMAGE_SUFFIXES:
+                            raise ValueError('请拖入支持的图片文件。')
+                        batch=uuid.UUID(values.get('batch',[''])[0]).hex
+                    except ValueError:
+                        # Drain small rejected requests so Windows does not reset the socket
+                        # before the client receives the useful JSON error response.
+                        if length<=1024*1024:self.rfile.read(length)
+                        raise
+                    folder=app.home/'imports'/batch
+                    folder.mkdir(parents=True,exist_ok=True)
+                    # Keep the original display name; isolate collisions inside this owned batch.
+                    target=folder/name
+                    if target.exists():target=folder/(uuid.uuid4().hex[:8]+'-'+name)
+                    temporary=target.with_suffix(target.suffix+'.part')
+                    try:
+                        remaining=length
+                        with temporary.open('wb') as output:
+                            while remaining:
+                                chunk=self.rfile.read(min(1024*1024,remaining))
+                                if not chunk:raise ValueError('图片传输未完成，请重试。')
+                                output.write(chunk);remaining-=len(chunk)
+                        with Image.open(temporary) as image:image.verify()
+                        temporary.rename(target)
+                    finally:
+                        temporary.unlink(missing_ok=True)
+                    return self.json({'path':str(target.resolve()),'folder':str(folder.resolve())})
                 if not 0 <= length <= 1024*1024:
                     raise ValueError('请求过大。')
                 data = json.loads(self.rfile.read(length) or b'{}')
-                route = parsed.path.removeprefix('/api/')
                 if route == 'pick':
                     if app.window is None:
                         raise ValueError('浏览器预览中请直接填写本地路径；桌面版可使用文件选择器。')

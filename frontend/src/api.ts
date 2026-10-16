@@ -7,6 +7,19 @@ export async function api<T=any>(route: string, payload?: unknown): Promise<T> {
   return data;
 }
 export function asset(id: string, size = 'thumb') {return `/api/image?id=${encodeURIComponent(id)}&size=${size}&token=${encodeURIComponent(token)}`;}
+export type UploadedImages={paths:string[];folder:string};
+export async function uploadImages(files:File[]):Promise<UploadedImages> {
+  if(!files.length||files.some(file=>! /\.(jpe?g|png|webp|bmp|tiff?)$/i.test(file.name)))throw new Error('请拖入支持的图片文件。');
+  if(files.some(file=>!file.size||file.size>64*1024*1024))throw new Error('单张拖入图片不能超过 64 MB。');
+  const batch=crypto.randomUUID(),paths:string[]=[];let folder='';
+  for(const file of files){
+    const response=await fetch(`/api/upload-image?batch=${batch}&name=${encodeURIComponent(file.name)}`,{
+      method:'POST',headers:{'X-Memivo-Token':token,'Content-Type':'application/octet-stream'},body:file});
+    const result=await response.json();if(!response.ok)throw new Error(result.error||'操作失败');
+    paths.push(result.path);folder=result.folder;
+  }
+  return {paths,folder};
+}
 export type Face = {bbox:number[]; identity:string|null; status:string; candidates:{name:string;score:number}[]};
 export type Photo = {id:string;name:string;path:string;faces:Face[];error:string|null;processed:boolean;width?:number;height?:number};
 export type Detection = {photo:string;source:string;model:string;conf:number;iou:number;width:number;height:number;detections:{class_id:number;name:string;confidence:number;bbox:number[]}[];counts:{class_id:number;name:string;count:number}[];total:number};

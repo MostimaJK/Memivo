@@ -18,7 +18,14 @@ def run_project(config, backend, progress=lambda done, total, message: None, can
         raise ValueError('匹配阈值和差距必须位于 0 到 1 之间。')
     if not config.get('references'):
         raise ValueError('请至少登记一位朋友的参考照。')
-    paths = [source] if source.is_file() else sorted(p for p in source.rglob('*') if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES)
+    if 'input_paths' in config:
+        if not isinstance(config['input_paths'],list) or any(not isinstance(p,str) for p in config['input_paths']):
+            raise ValueError('导入的图像文件不可用，请检查项目文件。')
+        paths=[Path(p).resolve() for p in config['input_paths']]
+        if any(not p.is_file() or p.suffix.lower() not in IMAGE_SUFFIXES for p in paths):
+            raise ValueError('导入的图像文件不可用，请检查项目文件。')
+    else:
+        paths = [source] if source.is_file() else sorted(p for p in source.rglob('*') if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES)
     if not paths:
         raise ValueError('目录内没有支持的照片。')
     workspace.mkdir(parents=True, exist_ok=True)

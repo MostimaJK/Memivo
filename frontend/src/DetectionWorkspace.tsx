@@ -1,7 +1,7 @@
 import {TaskDiagnostics} from './LogPanel';
 import {ImageViewport} from './ImageViewport';
 import React, {useEffect, useState} from 'react';
-import {ActionButton, Button, Text, Picker, PickerItem, NumberField, Divider, SegmentedControl, SegmentedControlItem} from '@react-spectrum/s2';
+import {ActionButton, Button, Text, Picker, PickerItem, NumberField, Divider} from '@react-spectrum/s2';
 import {style} from '@react-spectrum/s2/style' with {type:'macro'};
 import ImageIcon from '@react-spectrum/s2/icons/Image';
 import Play from '@react-spectrum/s2/icons/Play';
@@ -30,8 +30,7 @@ export function DetectionWorkspace({state,selected,busy,onSelect,onImport,onSett
       <div className="editor-toolbar"><Picker aria-label={t('选择图像')} value={selected||null} onChange={key=>onSelect(String(key))} placeholder={t('选择一张照片')}>
         {(state?.photos||[]).map(p=><PickerItem id={p.id} key={p.id}>{p.name}</PickerItem>)}</Picker>
         <ActionButton onPress={onImport} isDisabled={busy}>{t('导入单张图像')}</ActionButton>
-        <SegmentedControl aria-label={t('检测显示方式')} selectedKey={showResult&&result?'result':'original'} onSelectionChange={key=>setShowResult(key==='result')} isDisabled={!result}>
-          <SegmentedControlItem id="original">{t('原图')}</SegmentedControlItem><SegmentedControlItem id="result">{t('检测结果')}</SegmentedControlItem></SegmentedControl>
+        <Button variant={showResult&&result?'accent':'secondary'} aria-pressed={!!result&&showResult} aria-label={t('检测显示方式')} onPress={()=>setShowResult(!showResult)} isDisabled={!result}>{showResult&&result?'Result':t('原图')}</Button>
         {result&&<span className="microcopy">{t('显示 {0} / {1} 个目标',[visible.length,result.total])}</span>}
       </div>
       <TaskDiagnostics state={state} kind="目标检测" onFeatures={onFeatures} onOpen={onOpenLogs}/>
