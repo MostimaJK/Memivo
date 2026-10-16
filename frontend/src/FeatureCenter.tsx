@@ -8,7 +8,7 @@ import {useI18n} from './i18n';
 const full=style({width:'full'});
 export function FeatureCenter({state,busy,onAction}:{state:State|null;busy:boolean;onAction:(route:string,data?:unknown)=>void}) {
     const {t}=useI18n();
-    const [profile,setProfile]=useState('auto');
+    const [profile,setProfile]=useState<Record<string,string>>({vision:'auto',face:'auto'});
     const [remove,setRemove]=useState<string|null>(null);
     const requested=useRef(false);
     const runtime=state?.runtimes, hardware=runtime?.hardware;
@@ -26,10 +26,12 @@ export function FeatureCenter({state,busy,onAction}:{state:State|null;busy:boole
         <div className="feature-heading"><h3>{id==='vision'?t('视觉 AI 引擎'):t('人物识别引擎')}</h3><StatusLight variant={installed?'positive':engine?.state==='failed'?'negative':'neutral'}>{installed?t('已就绪'):engine?.state==='installing'?t('安装中'):engine?.state==='failed'?t('需要修复'):t('未安装')}</StatusLight></div>
         <p className="muted">{id==='vision'?t('YOLO 检测与 SAM3 抠图共用一套环境，避免重复安装。'):t('SCRFD 与 LVFace / ArcFace 的本地人脸匹配环境。')}</p>
         <div className="engine-detail"><span>{id==='vision'?'PyTorch + Ultralytics':'ONNX Runtime + InsightFace'}</span>{installed&&<span>{engine?.profile==='cu128'?'NVIDIA · CUDA 12.8':'CPU'} · {((engine?.bytes||0)/1024**3).toFixed(2)} GB</span>}</div>
-        {id==='vision'&&!installed&&<Picker label={t('安装方案')} value={profile} onChange={key=>setProfile(String(key))} isDisabled={busy} styles={full}><PickerItem id="auto">{t('自动选择（推荐）')}</PickerItem><PickerItem id="cpu">CPU</PickerItem>{hardware?.cuda_candidate&&<PickerItem id="cu128">NVIDIA · CUDA 12.8</PickerItem>}</Picker>}
-        <p className="microcopy">{id==='vision'?t('CPU 约 1–3 GB，NVIDIA 约 4–10 GB；均为估算，不含模型。'):t('当前自动方案为 CPU；部分电脑安装 InsightFace 需要已有的 C++ 构建工具。')}</p>
+        {!installed&&<Picker label={t('安装方案')} value={profile[id]} onChange={key=>setProfile(p=>({...p,[id]:String(key)}))} isDisabled={busy} styles={full}><PickerItem id="auto">{t('自动选择（推荐）')}</PickerItem><PickerItem id="cpu">CPU</PickerItem>{hardware?.cuda_candidate&&<PickerItem id="cu128">NVIDIA · CUDA 12.8</PickerItem>}</Picker>}
+        <p className="microcopy">{id==='vision'?t('CPU 约 1–3 GB，NVIDIA 约 4–10 GB；均为估算，不含模型。'):t('支持 CPU 与 NVIDIA CUDA 12.8；自动方案根据显卡与驱动选择，安装后验证实际计算。')}</p>
+        <p className="microcopy">{t('安装后请在设置中选择执行设备：CPU 或 NVIDIA CUDA。')}</p>
+        {id==='face'&&<p className="microcopy">{t('模型权重与引擎分开安装；部分电脑需要 Microsoft C++ 构建工具。')}</p>}
         {engine?.state==='failed'&&<p className="engine-error" role="alert">{t(engine.error||'安装未完成，请查看诊断日志后重试。')}</p>}
-        <div className="engine-actions"><Button variant={installed?'secondary':'accent'} isDisabled={busy||!hardware} onPress={()=>installed?setRemove(id):onAction('engine-install',{feature:id,profile:id==='vision'?profile:'cpu'})}>{installed?t('卸载引擎'):engine?.state==='failed'?t('重试安装'):t('安装引擎')}</Button>{!installed&&engine?.state==='failed'&&<ActionButton isDisabled={busy} onPress={()=>setRemove(id)}>{t('清理未完成环境')}</ActionButton>}</div>
+        <div className="engine-actions"><Button variant={installed?'secondary':'accent'} isDisabled={busy||!hardware} onPress={()=>installed?setRemove(id):onAction('engine-install',{feature:id,profile:profile[id]})}>{installed?t('卸载引擎'):engine?.state==='failed'?t('重试安装'):t('安装引擎')}</Button>{!installed&&engine?.state==='failed'&&<ActionButton isDisabled={busy} onPress={()=>setRemove(id)}>{t('清理未完成环境')}</ActionButton>}</div>
       </article>;
     })}</div>{state&&<ModelCenter state={state} busy={busy} onAction={onAction}/>}<section className="feature-notes"><h3>{t('你的数据独立保存')}</h3><p>{t('安装需要联网下载依赖。模型权重另行选择；卸载只移除本程序创建的引擎环境，保留照片、标注、模型和项目。')}</p><p>{t('暂不自动安装显卡驱动、系统 Python 或完整 CUDA Toolkit；不兼容时提供原因，可改用 CPU。')}</p><p>{t('安装引擎后，可在训练工作台使用已确认的数据集版本。')}</p></section>
       <details className="engine-logs"><summary>{t('诊断日志')}</summary><p className="microcopy">{runtime?.root}</p><pre aria-live="polite">{runtime?.logs.length?runtime.logs.join('\n'):t('安装与推理诊断将在这里显示。')}</pre></details>

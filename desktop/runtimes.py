@@ -40,7 +40,7 @@ x = torch.ones((16,16),device=device)
 nms(torch.tensor([[0.,0.,10.,10.]],device=device),torch.tensor([.9],device=device),.5).cpu()
 print(json.dumps(dict(torch=torch.__version__, cuda=torch.version.cuda, device=device)))
 """
-FACE_CHECK = "import onnxruntime, insightface; from insightface.model_zoo import get_model; from insightface.utils import face_align; assert 'CPUExecutionProvider' in onnxruntime.get_available_providers(); print('Face CPU environment imports OK')"
+FACE_CHECK = "from desktop.face_runtime import verify_face_runtime; verify_face_runtime(PROFILE)"
 
 
 def child_options():
@@ -200,9 +200,7 @@ class RuntimeManager:
             raise ValueError('请先卸载当前引擎，再切换安装方案。')
         if self.hardware is None:
             self.scan()
-        profile = self.hardware['recommended'] if profile == 'auto' and feature == 'vision' else ('cpu' if profile == 'auto' else profile)
-        if feature == 'face' and profile != 'cpu':
-            raise ValueError('人脸引擎当前仅提供 CPU 自动安装方案。')
+        profile = self.hardware['recommended'] if profile == 'auto' else profile
         if profile == 'cu128' and not self.hardware['cuda_candidate']:
             raise ValueError('当前驱动或显卡未满足此 GPU 方案，请选择 CPU。')
         if platform.system() not in ('Windows','Linux') or platform.machine().lower() not in ('amd64','x86_64'):
@@ -242,10 +240,15 @@ class RuntimeManager:
                 step(4, '安装视觉模型依赖…', pip + ['-c',constraints,'ultralytics==8.4.178','timm>=1.0,<2',CLIP_SOURCE])
                 check = "PROFILE="+repr(profile)+'\n'+TORCH_CHECK
             else:
-                step(3, '安装人脸运行库…', pip + ['numpy>=1.26,<2','Pillow>=10,<13','opencv-python>=4.10,<4.12','onnxruntime>=1.20,<2'])
+                runtime = (['onnxruntime-gpu[cuda,cudnn]==1.23.2',
+                            'nvidia-cuda-runtime-cu12==12.8.90', 'nvidia-cuda-nvrtc-cu12==12.8.93',
+                            'nvidia-cublas-cu12==12.8.4.1', 'nvidia-cudnn-cu12==9.10.2.21',
+                            'nvidia-cufft-cu12==11.3.3.83', 'nvidia-curand-cu12==10.3.9.90']
+                           if profile == 'cu128' else ['onnxruntime==1.23.2'])
+                step(3, '安装人脸运行库…', pip + ['numpy>=1.26,<2','Pillow>=10,<13','opencv-python>=4.10,<4.12'] + runtime)
                 # InsightFace can require local C++ build tools; never install a compiler silently.
                 step(4, '安装人脸模型依赖…', pip + ['numpy>=1.26,<2','opencv-python>=4.10,<4.12','insightface==0.7.3'])
-                check = FACE_CHECK
+                check = "PROFILE="+repr(profile)+'\n'+FACE_CHECK
             step(5, '验证引擎与执行设备…', [python,'-c',check])
             self.run([python,'-m','pip','check'],cancelled)
             size = sum(p.stat().st_size for p in target.rglob('*') if p.is_file())

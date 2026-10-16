@@ -20,7 +20,7 @@ class FaceBackend:
         if device not in {'cpu', 'cuda'}:
             raise ValueError('device 必须是 cpu 或 cuda')
         if device == 'cuda' and hasattr(ort, 'preload_dlls'):
-            ort.preload_dlls()
+            ort.preload_dlls(directory='')
         provider = 'CUDAExecutionProvider' if device == 'cuda' else 'CPUExecutionProvider'
         if provider not in ort.get_available_providers():
             raise RuntimeError(f'{provider} 不可用；检查 ONNX Runtime、CUDA、cuDNN。')
@@ -28,11 +28,15 @@ class FaceBackend:
         options = ort.SessionOptions()
         # Baseline uses one aligned face at a time; avoid multiple GPU sessions/jobs.
         self.session = ort.InferenceSession(str(recognition_path), sess_options=options, providers=providers)
+        if device == 'cuda':
+            self.session.disable_fallback()
         self.detector = get_model(str(detector_path), providers=providers)
         if self.detector is None or getattr(self.detector, 'taskname', '') != 'detection':
             raise ValueError('人脸检测器需要 InsightFace 支持的 SCRFD ONNX 模型。')
         self.detector.prepare(ctx_id=0 if device == 'cuda' else -1,
                               input_size=(640, 640), det_thresh=0.5)
+        if device == 'cuda':
+            self.detector.session.disable_fallback()
         if provider not in self.session.get_providers() or provider not in self.detector.session.get_providers():
             raise RuntimeError('所选执行后端未成功启用，停止任务，避免把 CPU 回退误报为 GPU。')
         self.providers = self.session.get_providers()

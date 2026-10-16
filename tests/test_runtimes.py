@@ -30,7 +30,7 @@ class RuntimeTests(unittest.TestCase):
             if fail_at and len(commands)==fail_at:
                 raise RuntimeError('simulated installer failure')
             if command[1:3]==['-m','venv']:
-                python=self.manager.executable('vision')
+                python=self.manager.executable(Path(command[-1]).name)
                 python.parent.mkdir(parents=True,exist_ok=True)
                 python.touch()
         return run
@@ -77,8 +77,52 @@ class RuntimeTests(unittest.TestCase):
             self.manager.install('vision','auto',lambda:False,lambda *a:None)
         self.assertTrue(any('https://download.pytorch.org/whl/cu128' in c for c in commands))
         self.assertEqual(self.manager.records['vision']['profile'],'cu128')
+        face_commands=[]
+        with patch.object(self.manager,'run',side_effect=self.fake_commands(face_commands)):
+            self.manager.install('face','auto',lambda:False,lambda *a:None)
+        self.assertIsNotNone(self.manager.python_for('face'))
+        self.assertEqual(self.manager.records['face']['profile'],'cu128')
+        packages=[p for command in face_commands for p in command]
+        self.assertIn('onnxruntime-gpu[cuda,cudnn]==1.23.2',packages)
+        self.assertNotIn('onnxruntime==1.23.2',packages)
+        self.assertIn('nvidia-cudnn-cu12==9.10.2.21',packages)
+        self.assertTrue(any('verify_face_runtime' in ' '.join(c) for c in face_commands))
+
+    def test_face_cpu_selection_and_failed_gpu_validation(self):
+        commands=[]
+        with patch.object(self.manager,'run',side_effect=self.fake_commands(commands)):
+            self.manager.install('face','auto',lambda:False,lambda *a:None)
+        self.assertEqual(self.manager.records['face']['profile'],'cpu')
+        self.assertTrue(any('onnxruntime==1.23.2' in c for c in commands))
+        self.manager.uninstall('face')
+        self.manager.hardware=dict(recommended='cu128',cuda_candidate=True)
+        with patch.object(self.manager,'run',side_effect=self.fake_commands([],fail_at=5)):
+            with self.assertRaises(RuntimeError):
+                self.manager.install('face','auto',lambda:False,lambda *a:None)
+        self.assertIsNone(self.manager.python_for('face'))
+        self.assertEqual(self.manager.records['face']['state'],'failed')
+
+    def test_face_gpu_refused_without_compatible_hardware(self):
         with self.assertRaises(ValueError):
             self.manager.install('face','cu128',lambda:False,lambda *a:None)
+        self.assertFalse(self.manager.directory('face').exists())
+
+    def test_managed_face_recognition_gpu_profile_guard_and_forwarding(self):
+        app=Application(self.root/'app')
+        weight=self.root/'face.onnx';weight.touch()
+        app.config.update(source=str(self.root),references={'friend':[str(weight)]},
+                          detector=str(weight),recognition=str(weight),device='cuda')
+        with patch.object(app.runtimes,'python_for',return_value=Path(sys.executable)), \
+             patch.object(app.runtimes,'job',side_effect=RuntimeError('GPU job reached')) as job:
+            app.runtimes.records['face']={'profile':'cpu'}
+            app.recognize();app.worker.join(5)
+            self.assertEqual(app.task['state'],'failed')
+            self.assertIn('NVIDIA',app.task['error'])
+            job.assert_not_called()
+            app.runtimes.records['face']={'profile':'cu128'}
+            app.recognize();app.worker.join(5)
+            self.assertIn('GPU job reached',app.task['error'])
+            self.assertEqual(job.call_args.args[2]['config']['device'],'cuda')
 
     def test_interrupted_install_not_reported_as_ready(self):
         self.manager.directory('vision').mkdir()

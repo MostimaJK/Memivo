@@ -348,8 +348,8 @@ class Application:
             from album.service import run_project
             managed = self.runtimes.python_for('face') if not self.backend_factory else None
             if managed:
-                if config['device'] != 'cpu':
-                    raise ValueError('人脸引擎当前仅提供 CPU 自动安装方案。')
+                if config['device'] == 'cuda' and self.runtimes.records.get('face', {}).get('profile') != 'cu128':
+                    raise ValueError('请先在功能中心将人物识别引擎切换为 NVIDIA 方案。')
                 report = self.runtimes.job('face','recognize',{'config':config},self.cancel.is_set,self.progress)
             elif self.backend_factory:
                 backend = self.backend_factory(config)

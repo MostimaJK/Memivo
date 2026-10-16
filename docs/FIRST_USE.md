@@ -33,7 +33,7 @@ EXE 仍使用外部 Python，不是完整離線安裝包。ZIP 必須全部解�
 | SAM3 提示分割與去背 | 視覺 AI 引擎 | `sam3.pt` |
 | 人物識別與相簿整理 | 人物識別引擎 | SCRFD 偵測 ONNX ＋ LVFace／ArcFace 識別 ONNX |
 
-首次建議選 CPU，先驗證工作流程。NVIDIA 方案需要相容的顯示卡與驅動；自動偵測的推薦不等於已在你的電腦完成實際模型驗證。人臉引擎的自動安裝目前提供 CPU 方案，請將人物識別的執行裝置設為 CPU。
+首次建議選 CPU，先驗證工作流程。NVIDIA 方案需要相容的顯示卡與驅動；自動偵測的推薦不等於已在你的電腦完成實際模型驗證。人臉引擎支援 CPU 與 NVIDIA CUDA 12.8；相容顯示卡可選自動或 NVIDIA 方案。安裝驗證成功後，請在設定將執行裝置改為 NVIDIA CUDA；既有 CPU 引擎須先卸載再安裝 GPU 方案。詳見 [引擎與 GPU 切換指南](OPTIONAL_ENGINES.md)。
 
 視覺引擎估計需 CPU 約 1–3 GB、NVIDIA 約 4–10 GB 磁碟空間，實際依套件版本而異，另外還需模型、照片與訓練輸出空間。程式不會自動安裝系統 Python、顯示卡驅動或完整 CUDA Toolkit。InsightFace 在部分 Windows 環境需要既有的 C++ 建構工具；失敗時請保留診斷紀錄。
 

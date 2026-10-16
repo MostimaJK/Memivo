@@ -5,12 +5,12 @@
 ## 安装与使用
 
 - **视觉 AI 引擎**：YOLO 与 SAM3 共用 PyTorch/Ultralytics 环境。可选自动、CPU、满足候选条件时的 NVIDIA CUDA 12.8。
-- **人物识别引擎**：ONNX Runtime/InsightFace，首版自动安装提供 CPU 方案。
+- **人物识别引擎**：ONNX Runtime/InsightFace，支持自动、CPU、NVIDIA CUDA 12.8；5070 Ti 等满足检测条件时自动推荐 NVIDIA。
 - 自动安装首版面向 Windows/Linux x64、主程序 Python 3.10–3.12。其他组合提示不支持，不猜测安装命令。
 - 点击安装才联网下载，使用官方 PyPI、PyTorch 源与 Ultralytics 官方 CLIP 仓库的固定提交。引擎安装不会安装驱动、系统 Python、完整 CUDA Toolkit 或模型权重。官方权重在同页独立下载或访问官方入口。
 - 环境放在应用状态目录的 `runtimes/vision`、`runtimes/face`，各有所有权和状态标记。模型、数据集与训练结果应存放在这些环境目录之外。
 - 安装使用已核对的 PyTorch 2.9.1/torchvision 0.24.1 配对；CPU 与 cu128 分开选择。这是维护中的固定方案，不代表自动追随最新版本。
-- 视觉使用已验收的 Ultralytics 8.4.178，另安装 timm 与 SAM3 所需的 CLIP 分词器（固定提交 `7ffa84b3bfa40c42ecc1c77147a855e69cb2dd40`，无需系统 Git）。安装后检查 Torch、Torchvision NMS、Ultralytics、SAM3 接口、timm 与实际分词；GPU 方案额外执行 GPU 张量运算。人脸环境检查核心导入与 CPU provider。检查成功且 `pip check` 通过后才标记就绪。
+- 视觉使用已验收的 Ultralytics 8.4.178，另安装 timm 与 SAM3 所需的 CLIP 分词器（固定提交 `7ffa84b3bfa40c42ecc1c77147a855e69cb2dd40`，无需系统 Git）。安装后检查 Torch、Torchvision NMS、Ultralytics、SAM3 接口、timm 与实际分词；GPU 方案额外执行 GPU 张量运算。人脸环境检查核心导入，并执行 ONNX 卷积；GPU 方案加载环境内的 NVIDIA 运行库，检查计算结果和 CUDA 节点执行记录，失败时不会报告 GPU 就绪。检查成功且 `pip check` 通过后才标记就绪。
 - 模型库见项目或 EXE 同级的 `model/README.md`：按用途放入权重，启动/设置扫描，单个候选自动选择、多个候选下拉选择；保留外部文件入口。YOLO11/YOLO26 检测与分割各有 n/s/m/l/x，点击下载才联网，验证发布文件大小与 SHA-256，不覆盖同名文件。LVFace、InsightFace、SAM3 提供官方规格/入口；SAM3 访问申请由用户自行处理。
 - 模型权重仍在设置中选择；执行设备仍遵循已保存设置，不因安装方案改变而覆盖用户设置。环境检查不等于具体模型加载或精度验证。
 
@@ -29,3 +29,18 @@
 本机已完成 NVIDIA 实际探测、前端交互与构建、多语言覆盖、环境管理及数据集测试。另在隔离验收目录真实安装 CPU 视觉引擎（约 984 MiB），通过 Torch/NMS/SAM3 接口检查与 pip check，并执行合成数据上的检测训练、分割训练、评估、恢复与再次检测。CUDA 引擎安装、GPU 实模型、人脸引擎仍需目标机测试。标注和训练入口已提供，见 [完整流程](LEARNING_WORKFLOW.md)。
 
 安装方案参考：[PyTorch 官方版本配对](https://pytorch.org/get-started/previous-versions/#v291)、[Ultralytics 安装说明](https://docs.ultralytics.com/quickstart/)。方案更新需重新检查支持系统、Python、驱动和真实运行测试。
+
+## RTX 5070 Ti：从 CPU 切换到 GPU
+
+1. 更新主程序。源码版执行 `git pull --ff-only`，再运行 `start_memivo.bat`；EXE 版须下载新的 Windows ZIP 并完整解压，不能只替换一个 EXE。
+2. 功能中心点“重新检测”，确认显示 RTX 5070 Ti。需要驱动支持 CUDA 12.8 或以上；这里是驱动能力，不要求手动安装完整 CUDA Toolkit。
+3. 若人物识别引擎已经装成 CPU，先卸载该引擎，再选择“自动选择”或“NVIDIA · CUDA 12.8”并安装。模型权重保持原位置。
+4. 等安装验证完成，确认引擎显示 NVIDIA。若失败，查看诊断日志；不要将失败状态视为 GPU 已启用。
+5. 在设置中将执行设备改为 NVIDIA CUDA，保存。设备设置是项目设置，不会因安装引擎自动更改。
+6. 先用少量照片执行人物识别。任务报告 `report.json` 中的 `providers` 应包含 `CUDAExecutionProvider`。更换设备后缓存仍可复用，缓存命中不表示本次实际调用 GPU；验证时应使用新照片或新项目。
+
+GPU 人脸环境采用 ONNX Runtime GPU 1.23.2、CUDA 12.8 运行库与 cuDNN 9.10.2.21，依赖放在独立环境，不修改系统 CUDA；无需额外安装 PyTorch。GPU 安装仍需联网下载数 GB 依赖，缺少 Microsoft C++ 构建工具时 InsightFace 0.7.3 可能安装失败。不同引擎的依赖不会相互借用。
+
+此版本通过安装配方、GPU 失败状态及任务设备传递测试；本机不具备目标 GPU，RTX 5070 Ti 实际推理仍需目标机验证。安装时执行的 CUDA 卷积检查不能代替完整模型的实际测试。
+
+参考：[ONNX Runtime CUDA 依赖与 DLL 加载](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html)、[NVIDIA cuDNN 支持矩阵](https://docs.nvidia.com/deeplearning/cudnn/backend/v9.10.1/reference/support-matrix.html)。
