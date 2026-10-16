@@ -1,0 +1,4 @@
+# UI shell only. AI engines remain optional, separately configured dependencies.
+numpy>=1.26,<3
+Pillow>=10,<13
+pywebview>=5,<7

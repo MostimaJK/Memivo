@@ -1,0 +1,13 @@
+{
+  "source": "D:/Photos/Disney",
+  "workspace": "D:/PhotoProjects/Disney",
+  "detector": "D:/Models/buffalo_l/det_10g.onnx",
+  "recognition": "D:/Models/LVFace-B_Glint360K.onnx",
+  "device": "cuda",
+  "threshold": 0.55,
+  "margin": 0.08,
+  "references": {
+    "小明": ["D:/Photos/References/xiaoming.jpg"],
+    "小红": ["D:/Photos/References/xiaohong.jpg"]
+  }
+}

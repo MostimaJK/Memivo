@@ -1,0 +1,5 @@
+# Optional object detection / SAM inference. Install into a dedicated model environment.
+-r requirements-spectrum.txt
+ultralytics==8.4.178
+timm>=1.0,<2
+https://github.com/ultralytics/CLIP/archive/7ffa84b3bfa40c42ecc1c77147a855e69cb2dd40.zip

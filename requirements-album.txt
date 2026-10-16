@@ -1,0 +1,4 @@
+# Complete album environment; choose exactly one ONNX Runtime variant separately.
+-r requirements-spectrum.txt
+opencv-python>=4.10,<5
+insightface>=0.7.3,<3
