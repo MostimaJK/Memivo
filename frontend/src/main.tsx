@@ -1,3 +1,4 @@
+import {ImageViewport} from './ImageViewport';
 import {ModelSettings} from './ModelSettings';
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -63,10 +64,7 @@ function App() {
     const [opacity, setOpacity] = useState(.65);
     const [samConf, setSamConf] = useState(.3);
     const [samIou, setSamIou] = useState(.7);
-    const [zoom, setZoom] = useState(1);
-    const canvasRef = useRef<HTMLDivElement>(null);
-    const [canvasWidth, setCanvasWidth] = useState(650);
-    const pan = useRef<number[] | null>(null);
+    const [segmentView,setSegmentView]=useState('overlay');
     const [dimensions, setDimensions] = useState([1, 1]);
     const drag = useRef<number[] | null>(null);
     const [draftBox, setDraftBox] = useState<number[] | null>(null);
@@ -82,19 +80,19 @@ function App() {
     useEffect(() => { if (!busy)
         return; const id = setInterval(() => refresh().catch(e => setError(e.message)), 900); return () => clearInterval(id); }, [busy]);
     useEffect(() => { setPage(0); }, [filter, person, query]);
-    useEffect(() => { setMarks([]); setFaceIndex(0); setIdentity(''); setPrompt(''); setZoom(1); }, [selected]);
-    useEffect(() => { if (!canvasRef.current)
-        return; const observer = new ResizeObserver(entries => setCanvasWidth(Math.max(200, entries[0].contentRect.width))); observer.observe(canvasRef.current); return () => observer.disconnect(); }, [tab]);
+    useEffect(()=>{if(state?.task.state==='failed')setError(state.task.error||state.task.message);},[state?.task.state,state?.task.error]);
+    useEffect(() => { setMarks([]); setFaceIndex(0); setIdentity(''); setPrompt(''); setDimensions([photo?.width||1,photo?.height||1]); }, [selected]);
     useEffect(() => { setIdentity(photo?.faces[faceIndex]?.identity || ''); }, [faceIndex, selected]);
     useEffect(() => { localStorage.setItem('sf-theme', dark ? 'dark' : 'light'); }, [dark]);
     const act = async (route: string, data: unknown = {}, message = '') => {
         setError('');
+        if(route==='segment'||route==='detect')setNotice('');
         setRefreshing(true);
         try {
             const result = await api(route, data);
             await refresh();
-            if (message)
-                setNotice(message);
+            if (result?.path) setNotice(t('已保存到：{0}',[result.path]));
+            else if (message) setNotice(message);
             return result;
         }
         catch (e) {
@@ -119,11 +117,7 @@ function App() {
     const drawStart = (e: React.PointerEvent<SVGSVGElement>) => {
         if (busy || mode === 'text')
             return;
-        if (mode === 'view' && canvasRef.current) {
-            pan.current = [e.clientX, e.clientY, canvasRef.current.scrollLeft, canvasRef.current.scrollTop];
-            e.currentTarget.setPointerCapture(e.pointerId);
-            return;
-        }
+        if (e.button !== 0 || mode === 'view') return;
         const values = getPoint(e);
         if (mode === 'box') {
             drag.current = values;
@@ -134,10 +128,6 @@ function App() {
             setMarks(m => [...m, { type: 'point', values, label: mode === 'negative' ? 0 : 1 }]);
     };
     const drawEnd = (e: React.PointerEvent<SVGSVGElement>) => {
-        if (pan.current) {
-            pan.current = null;
-            return;
-        }
         if (!drag.current)
             return;
         const [x, y] = getPoint(e), [a, b] = drag.current;
@@ -147,22 +137,17 @@ function App() {
         setDraftBox(null);
     };
     const renderBox = (values: number[], key: number | string, color: string) => <rect key={key} x={values[0]} y={values[1]} width={values[2] - values[0]} height={values[3] - values[1]} stroke={color} strokeWidth={2} vectorEffect="non-scaling-stroke" fill="none"/>;
-    const imageStage = (editor = false) => photo && <div className={'image-stage ' + (editor ? 'editable' : '')} style={editor ? { width: Math.min(dimensions[0], canvasWidth) * zoom, maxWidth: 'none' } : undefined}>
-    <img className="main-photo" src={asset(photo.id, 'preview')} alt={photo.name} onLoad={e => { const img = e.currentTarget; /* preview can be scaled: retrieve native dimensions separately via original image metadata */ /* preview can be scaled: retrieve native dimensions separately via original image metadata */ if (img.dataset.width)
-        setDimensions([Number(img.dataset.width), Number(img.dataset.height)]);
-    else
-        setDimensions([img.naturalWidth, img.naturalHeight]); }} data-width={photo.width} data-height={photo.height}/>
-    <svg className="image-overlay" viewBox={`0 0 ${dimensions[0]} ${dimensions[1]}`} aria-label={editor ? t("图像标记画布") : t("人脸位置")} onPointerDown={editor ? drawStart : undefined} onPointerUp={editor ? drawEnd : undefined} onPointerCancel={() => { pan.current = null; drag.current = null; setDraftBox(null); }} onPointerMove={e => { if (pan.current && canvasRef.current) {
-        canvasRef.current.scrollLeft = pan.current[2] - (e.clientX - pan.current[0]);
-        canvasRef.current.scrollTop = pan.current[3] - (e.clientY - pan.current[1]);
-    } if (drag.current)
-        setDraftBox([...drag.current, ...getPoint(e)]); }}>
-      {!editor && photo.faces.map((f, i) => <g key={i}>{renderBox(f.bbox, i, i === faceIndex ? '#7bb9ff' : '#ffd580')}<text x={f.bbox[0]} y={Math.max(24, f.bbox[1] - 8)} fill="white" fontSize={Math.max(18, dimensions[0] / 65)}>{i + 1}</text></g>)}
-      {editor && marks.map((m, i) => m.type === 'box' ? renderBox(m.values, i, '#8bc9ff') : <circle key={i} cx={m.values[0]} cy={m.values[1]} r={Math.max(5, dimensions[0] / 130)} fill={m.label ? '#59dca2' : '#ff8181'} stroke="white" strokeWidth="1.5" vectorEffect="non-scaling-stroke"/>)}
-      {draftBox && renderBox([Math.min(draftBox[0], draftBox[2]), Math.min(draftBox[1], draftBox[3]), Math.max(draftBox[0], draftBox[2]), Math.max(draftBox[1], draftBox[3])], 'draft', '#8bc9ff')}
-    </svg>
-    {editor && (state as any)?.segment?.photo === photo.id && <img className="result-overlay" style={{ opacity }} src={asset((state as any).segment.overlay, 'preview')} alt={t("分割结果")}/>}
-  </div>;
+    const segment=state?.segment?.photo===selected?state.segment:null;
+    useEffect(()=>{if(segment)setSegmentView('overlay');},[segment?.overlay]);
+    const markLayer=<svg className="image-overlay annotation-overlay" viewBox={`0 0 ${dimensions[0]} ${dimensions[1]}`} aria-label={t('图像标记画布')}
+      onPointerDown={drawStart} onPointerUp={drawEnd} onPointerCancel={()=>{drag.current=null;setDraftBox(null);}}
+      onPointerMove={event=>{if(drag.current)setDraftBox([...drag.current,...getPoint(event)]);}}>
+      {marks.map((m,i)=>m.type==='box'?renderBox(m.values,i,'#8bc9ff'):<circle key={i} cx={m.values[0]} cy={m.values[1]} r="calc(5px / var(--image-scale, 1))" fill={m.label?'#59dca2':'#ff8181'} stroke="white" strokeWidth="1.5" vectorEffect="non-scaling-stroke"/>)}
+      {draftBox&&renderBox([Math.min(draftBox[0],draftBox[2]),Math.min(draftBox[1],draftBox[3]),Math.max(draftBox[0],draftBox[2]),Math.max(draftBox[1],draftBox[3])],'draft','#8bc9ff')}
+    </svg>;
+    const imageStage=()=>photo&&<div className="image-stage"><img className="main-photo" src={asset(photo.id,'preview')} alt={photo.name}/>
+      <svg className="image-overlay" viewBox={`0 0 ${photo.width||dimensions[0]} ${photo.height||dimensions[1]}`} aria-label={t('人脸位置')}>
+      {photo.faces.map((f,i)=><g key={i}>{renderBox(f.bbox,i,i===faceIndex?'#7bb9ff':'#ffd580')}<text x={f.bbox[0]} y={Math.max(24,f.bbox[1]-8)} fill="white" fontSize={Math.max(18,(photo.width||dimensions[0])/65)}>{i+1}</text></g>)}</svg></div>;
     return <Provider colorScheme={dark ? 'dark' : 'light'} locale={locale}><div className={'app ' + (dark ? 'dark' : 'light')}>
     <header className="topbar"><div className="brand"><img className="brand-mark" src="/memivo.svg" alt="" aria-hidden="true"/><strong>Memivo</strong><span className="product-tag">{t("影像工作台")}</span></div><div className="global-search"><SearchField aria-label={t("搜索照片名称")} placeholder={t("搜索你的照片…")} value={query} onChange={v => { setQuery(v); setTab('library'); }} styles={fullWidth}/></div><div className="topbar-right"><StatusLight variant={busy ? 'informative' : 'positive'}>{busy ? t("任务进行中") : t("本地工作区")}</StatusLight><ActionButton isQuiet aria-label={t("切换明暗主题")} onPress={() => setDark(v => !v)}><span>{dark ? '☀' : '◐'}</span></ActionButton><ActionButton isQuiet aria-label={t("模型与项目设置")} onPress={() => setModal('settings')}><Settings /></ActionButton></div></header>
     <div className="shell"><aside className="sidebar"><div className="workspace-label">{t("工作空间")}</div><nav aria-label={t("主导航")}>{[
@@ -195,7 +180,10 @@ function App() {
       {tab === 'training' && state && <TrainingWorkspace state={state} busy={busy} onAction={act} onFeatures={()=>setTab('features')} onDataset={()=>setTab('datasets')}/>}
       {tab === 'features' && <FeatureCenter state={state} busy={busy} onAction={trigger}/>}
       {tab === 'detect' && <DetectionWorkspace state={state} selected={selected} busy={busy} onSelect={setSelected} onImport={()=>setModal('image')} onSettings={()=>setModal('settings')} onExport={()=>setModal('save-detection')} onDetect={options=>trigger('detect',options)} onSegment={bbox=>{setMarks([{type:'box',values:bbox,label:1}]);setMode('box');setTab('segment');}}/>}
-      {tab === 'segment' && <div className="segment-layout"><div className="segment-main"><div className="editor-toolbar"><Picker aria-label={t("选择照片")} value={selected || null} onChange={k => setSelected(String(k))} placeholder={t("选择一张照片")}>{photos.map(p => <PickerItem id={p.id}>{p.name}</PickerItem>)}</Picker><SegmentedControl aria-label={t("标记工具")} selectedKey={mode} onSelectionChange={k => setMode(String(k))}>{[['view', t("平移")], ['point', t("正点")], ['negative', t("负点")], ['box', t("框选")], ['text', t("文字")]].map(([key, label]) => <SegmentedControlItem id={key} key={key}>{label}</SegmentedControlItem>)}</SegmentedControl><ActionButton aria-label={t("撤销标记")} isDisabled={!marks.length || busy} onPress={() => setMarks(m => m.slice(0, -1))}><Undo /></ActionButton><ActionButton isDisabled={!marks.length || busy} onPress={() => setMarks([])}>{t("清空")}</ActionButton></div><div className="editor-canvas" ref={canvasRef}>{photo ? imageStage(true) : <div className="canvas-empty"><MagicWand /><h3>{t("给你的选择，多一点精准")}</h3><p>{t("先从图库导入照片，再选择要分割的图像。")}</p><Button variant="secondary" onPress={() => setModal('import')}>{t("导入照片")}</Button></div>}</div><div className="canvas-caption"><div className="zoom-controls"><ActionButton aria-label={t("缩小图像")} isDisabled={!photo || zoom <= .5} onPress={() => setZoom(z => Math.max(.5, z - .25))}>−</ActionButton><ActionButton aria-label={t("适应画布")} isDisabled={!photo} onPress={() => setZoom(1)}>{Math.round(zoom * 100)}%</ActionButton><ActionButton aria-label={t("放大图像")} isDisabled={!photo || zoom >= 4} onPress={() => setZoom(z => Math.min(4, z + .25))}><Add /></ActionButton></div><span>{photo ? photo.name : t("尚未选择图像")}</span><span>{marks.length}{t("个标记 ·")}{mode === 'box' ? t("拖动绘制矩形") : mode === 'text' ? t("右侧输入概念提示") : mode === 'negative' ? t("点击排除目标") : t("点击选择目标")}</span></div></div><aside className="segment-controls"><div className="panel-heading"><MagicWand /><h3>{t("提示与结果")}</h3></div><p className="muted">{t("用视觉标记选择具体目标，或用文字寻找图像中的概念。")}</p><TextField label={t("文本提示")} placeholder={t("例如：person、red bag")} value={prompt} onChange={setPrompt} isDisabled={busy || mode !== 'text'} styles={fullWidth}/><p className="microcopy">{t("文字模式使用概念提示；点与框模式使用画布标记。")}</p><Divider size="S" styles={dividerSpacing}/><div className="sam-thresholds"><NumberField label={t("置信阈值")} value={samConf} onChange={setSamConf} minValue={0} maxValue={1} step={.05} isDisabled={busy} styles={fullWidth}/><NumberField label={t("IoU 阈值")} value={samIou} onChange={setSamIou} minValue={0} maxValue={1} step={.05} isDisabled={busy} styles={fullWidth}/></div><div className="mark-legend"><span><i className="positive"/>{t("正点：包含")}</span><span><i className="negative"/>{t("负点：排除")}</span></div><Button variant="accent" styles={fullWidthSpaced} isDisabled={busy || !photo || (mode === 'text' ? !prompt.trim() : !marks.length)} onPress={() => trigger('segment', { id: selected, conf: samConf, iou: samIou, text: mode === 'text' ? prompt : '', points: marks.filter(m => m.type === 'point').map(m => m.values), labels: marks.filter(m => m.type === 'point').map(m => m.label), boxes: marks.filter(m => m.type === 'box').map(m => m.values) })}><MagicWand /><Text>{t("生成分割")}</Text></Button><Divider size="S" styles={dividerSpacing}/><Slider label={t("结果叠加透明度")} value={Math.round(opacity * 100)} onChange={v => setOpacity(Number(v) / 100)} minValue={0} maxValue={100} styles={fullWidth}/><Button variant="secondary" styles={fullWidthSpaced} isDisabled={busy || !(state as any)?.segment || (state as any)?.segment?.photo !== selected} onPress={() => setModal('save-segment')}><Export /><Text>{t("导出透明 PNG")}</Text></Button><div className="info-note compact"><span>{t("保留你的原图")}</span><p>{t("分割结果独立保存，原始照片不会被修改。")}</p></div></aside></div>}
+      {tab === 'segment' && <div className="segment-layout"><div className="segment-main"><div className="editor-toolbar"><Picker aria-label={t("选择照片")} value={selected || null} onChange={k => setSelected(String(k))} placeholder={t("选择一张照片")}>{photos.map(p => <PickerItem id={p.id}>{p.name}</PickerItem>)}</Picker><SegmentedControl aria-label={t("标记工具")} selectedKey={mode} onSelectionChange={k => setMode(String(k))}>{[['view', t("平移")], ['point', t("正点")], ['negative', t("负点")], ['box', t("框选")], ['text', t("文字")]].map(([key, label]) => <SegmentedControlItem id={key} key={key}>{label}</SegmentedControlItem>)}</SegmentedControl><Picker aria-label={t('分割显示方式')} value={segment?segmentView:'original'} onChange={key=>setSegmentView(String(key))} isDisabled={!segment}>
+<PickerItem id="original">{t('原图')}</PickerItem><PickerItem id="overlay">{t('叠加结果')}</PickerItem><PickerItem id="mask">{t('黑白掩码')}</PickerItem><PickerItem id="cutout">{t('透明抠图')}</PickerItem></Picker><ActionButton aria-label={t("撤销标记")} isDisabled={!marks.length || busy} onPress={() => setMarks(m => m.slice(0, -1))}><Undo /></ActionButton><ActionButton isDisabled={!marks.length || busy} onPress={() => setMarks([])}>{t("清空")}</ActionButton></div><div className="editor-canvas">{photo ? <ImageViewport imageKey={photo.id} src={asset(segment&&(segmentView==='mask'||segmentView==='cutout')?segment[segmentView]:photo.id,segment&&(segmentView==='mask'||segmentView==='cutout')?'download':'full')} alt={photo.name} width={photo.width} height={photo.height} mode={mode==='view'||mode==='text'?'pan':'annotate'} checker={!!segment&&segmentView==='cutout'}>
+      {segment&&segmentView==='overlay'&&<img className="result-overlay" style={{opacity}} src={asset(segment.overlay,'download')} alt={t('分割结果')}/>}{markLayer}</ImageViewport> : <div className="canvas-empty"><MagicWand /><h3>{t("给你的选择，多一点精准")}</h3><p>{t("先从图库导入照片，再选择要分割的图像。")}</p><Button variant="secondary" onPress={() => setModal('import')}>{t("导入照片")}</Button></div>}</div><div className="canvas-caption"><span>{photo ? photo.name : t("尚未选择图像")}</span><span>{marks.length}{t("个标记 ·")}{mode === 'view' ? t('拖动平移图像') : mode === 'box' ? t("拖动绘制矩形") : mode === 'text' ? t("右侧输入概念提示") : mode === 'negative' ? t("点击排除目标") : t("点击选择目标")}</span></div></div><aside className="segment-controls"><div className="panel-heading"><MagicWand /><h3>{t("提示与结果")}</h3></div>{segment&&<section className="result-summary" aria-live="polite"><strong>{t(task.kind==='SAM3 分割'&&task.state!=='completed'?'上次分割结果 · {0} 个目标':'分割成功 · {0} 个目标',[segment.count])}</strong><p>{t('已自动保存掩码、透明抠图和预览。')}</p><label>{t('结果保存目录')}</label><code>{segment.directory}</code><Button variant="accent" styles={fullWidth} isDisabled={busy} onPress={()=>setModal('save-segment')}>{t('导出抠图或掩码')}</Button><ActionButton isDisabled={!state?.desktop} onPress={()=>trigger('segment-open',{id:selected})}>{t('打开结果文件夹')}</ActionButton></section>}<p className="muted">{t("用视觉标记选择具体目标，或用文字寻找图像中的概念。")}</p><TextField label={t("文本提示")} placeholder={t("例如：person、red bag")} value={prompt} onChange={setPrompt} isDisabled={busy || mode !== 'text'} styles={fullWidth}/><p className="microcopy">{t("文字模式使用概念提示；点与框模式使用画布标记。")}</p><Divider size="S" styles={dividerSpacing}/><div className="sam-thresholds"><NumberField label={t("置信阈值")} value={samConf} onChange={setSamConf} minValue={0} maxValue={1} step={.05} isDisabled={busy} styles={fullWidth}/><NumberField label={t("IoU 阈值")} value={samIou} onChange={setSamIou} minValue={0} maxValue={1} step={.05} isDisabled={busy} styles={fullWidth}/></div><div className="mark-legend"><span><i className="positive"/>{t("正点：包含")}</span><span><i className="negative"/>{t("负点：排除")}</span></div><Button variant="accent" styles={fullWidthSpaced} isDisabled={busy || !photo || (mode === 'text' ? !prompt.trim() : !marks.length)} onPress={() => trigger('segment', { id: selected, conf: samConf, iou: samIou, text: mode === 'text' ? prompt : '', points: marks.filter(m => m.type === 'point').map(m => m.values), labels: marks.filter(m => m.type === 'point').map(m => m.label), boxes: marks.filter(m => m.type === 'box').map(m => m.values) })}><MagicWand /><Text>{t("生成分割")}</Text></Button><Divider size="S" styles={dividerSpacing}/>
+<Slider label={t("结果叠加透明度")} value={Math.round(opacity * 100)} onChange={v => setOpacity(Number(v) / 100)} isDisabled={!segment||segmentView!=='overlay'} minValue={0} maxValue={100} styles={fullWidth}/><div className="info-note compact"><span>{t("保留你的原图")}</span><p>{t("分割结果独立保存，原始照片不会被修改。")}</p></div></aside></div>}
       {tab === 'tasks' && <div className="tasks-page"><div className="task-overview"><Clock /><div><h3>{task.state === 'idle' ? t("还没有处理任务") : t(task.kind)}</h3><p>{t(task.message)}</p></div>{busy && <Button variant="secondary" onPress={() => trigger('cancel')}>{t("停止任务")}</Button>}</div><h3>{t("本次会话记录")}</h3>{!state?.history.length ? <div className="no-results"><p>{t("导入、识别、分割与导出记录将在这里显示。")}</p></div> : <div className="history-list">{[...state.history].reverse().map((h, i) => <article key={i}><span className={'task-dot ' + h.state}/><div><strong>{t(h.kind)}</strong><p>{t(h.message)}</p></div><span>{h.seconds}s</span><time>{h.time}</time></article>)}</div>}</div>}
       <footer className={'statusbar ' + (busy ? 'running' : '')}><div>{busy ? <ProgressCircle aria-label={t("任务运行中")} size="S" isIndeterminate/> : <span className="status-dot"/>}<span>{t(task.message)}</span></div><div>{busy && <><ProgressBar aria-label={t("当前任务进度")} value={task.done} maxValue={task.total || 1} isIndeterminate={!task.total} valueLabel=""/><span>{task.total ? task.kind==='下载官方模型'?`${(task.done/1048576).toFixed(1)} / ${(task.total/1048576).toFixed(1)} MB`:`${task.done} / ${task.total}` : t("处理中")}</span><ActionButton isQuiet onPress={() => trigger('cancel')}>{t("停止")}</ActionButton></>}{!busy && <span>{processed} / {photos.length}{t("张已处理")}</span>}</div></footer>
     </main></div>
@@ -219,6 +207,7 @@ function ProjectDialog({ kind, state, busy, onClose, onAction }: {
     const [pending, setPending] = useState(false);
     const [instance, setInstance] = useState('all');
     const [crop, setCrop] = useState('crop');
+    const [output,setOutput]=useState('cutout');
     const title = { import: t("导入照片"), person: t("登记朋友"), settings: t("模型与项目设置"), export: t("导出人物相册"), open: t("打开已有项目"), 'save-segment': t("导出分割结果"), 'save-detection': t('导出检测 JSON'), image: t('导入单张图像') }[kind];
     const choose = async (type: string, field?: string) => { setErr(''); try {
         const result = await api('pick', { kind: type });
@@ -247,7 +236,7 @@ function ProjectDialog({ kind, state, busy, onClose, onAction }: {
             else if (kind === 'person')
                 await onAction('reference', { name, paths: paths.length ? paths : path.split(/\r?\n/).map(p => p.trim()).filter(Boolean) }, t("参考照片已登记。"));
             else
-                await onAction(kind === 'import' || kind === 'image' ? 'scan' : kind, {path, instance, crop: crop === 'crop', id: kind === 'save-segment' ? state.segment?.photo : state.detection?.photo}, kind === 'save-segment' ? t("透明 PNG 已导出。") : '');
+                await onAction(kind === 'import' || kind === 'image' ? 'scan' : kind, {path, instance, output, crop: output==='cutout'&&crop === 'crop', id: kind === 'save-segment' ? state.segment?.photo : state.detection?.photo}, kind === 'save-segment' ? t("透明 PNG 已导出。") : '');
             onClose();
         }
         catch (e) {
@@ -259,8 +248,8 @@ function ProjectDialog({ kind, state, busy, onClose, onAction }: {
     };
     return <Dialog size={kind === 'settings' ? 'L' : 'M'}><Heading slot="title">{title}</Heading><Content><div className="dialog-body">
     {kind === 'settings' ? <><section className="language-settings"><h3>{t('外观与语言')}</h3><Picker label="Language" value={draftLanguage} onChange={value=>{if(isLocale(value))setDraftLanguage(value);}} styles={fullWidth}>{languages.map(language=><PickerItem id={language.id} key={language.id}>{language.name}</PickerItem>)}</Picker><p className="microcopy">{languages.find(language=>language.id===draftLanguage)?.font} · {t('字体随语言自动切换，离线可用。')}<br/>{t('保存后生效，下次启动自动恢复。')}</p></section><Divider size="S"/><div className="settings-intro"><StatusLight variant="informative">{t("模型在本地运行，照片不上传")}</StatusLight><p>{t("配置一次后会保存到当前项目。识别与分割可以分别使用不同模型。")}</p></div><ModelSettings state={state} draft={draft} busy={busy} onAction={onAction} onChange={(key,value)=>setDraft(d=>({...d,[key]:value}))}/><div className="settings-grid"><Picker label={t("执行设备")} value={draft.device} onChange={k => setDraft(d => ({ ...d, device: String(k) }))}><PickerItem id="cpu">CPU</PickerItem><PickerItem id="cuda">NVIDIA CUDA</PickerItem></Picker><NumberField label={t("匹配阈值")} value={draft.threshold} onChange={threshold => setDraft(d => ({ ...d, threshold }))} minValue={0} maxValue={1} step={.01}/><NumberField label={t("候选差距")} value={draft.margin} onChange={margin => setDraft(d => ({ ...d, margin }))} minValue={0} maxValue={1} step={.01}/></div><p className="microcopy">{t("阈值为待校准起始值；更换识别模型后请重新评估匹配效果。")}</p><Divider size="S"/><h3>{t("项目存储")}</h3><TextField label={t("工作目录")} value={draft.workspace} onChange={workspace => setDraft(d => ({ ...d, workspace }))} styles={fullWidth} isReadOnly={!!state.photos.length}/><p className="microcopy">{t("缓存与审核结果保存在此目录。已有照片时请通过“打开已有项目”切换。")}</p><div className="dependency-list">{Object.entries(state.dependencies).map(([key, ok]) => <span key={key} className={ok ? 'ready' : 'missing'}>{ok ? '✓' : '○'} {key}</span>)}</div></> : <>
-      <p className="dialog-description">{kind === 'image' ? t('选择一张图像建立独立项目，原图不会被修改。') : kind === 'save-detection' ? t('保存当前图像的检测框、类别、置信分数和计数。') : kind === 'import' ? t("选择照片文件夹，包含子文件夹。仅建立索引，原图不会被移动。") : kind === 'person' ? t("给朋友起一个名字，选择一张或多张仅含一张清晰人脸的参考照。") : kind === 'export' ? t("按人物复制原始照片。合照可同时进入多人的相册；请先审核自动匹配结果。") : kind === 'open' ? t("选择之前保存的 project.json，恢复照片与审核结果。") : t("选择保存目录，导出带透明背景的 PNG。")}</p>
-      {kind === 'save-segment' && state.segment && <><Picker label={t('导出目标')} value={instance} onChange={key=>setInstance(String(key))} styles={fullWidth}><PickerItem id="all">{t('全部目标合并')}</PickerItem>{state.segment.instances.map((_,i)=><PickerItem id={String(i)} key={i}>{t('目标 {0}',[i+1])}</PickerItem>)}</Picker><Picker label={t('图像尺寸')} value={crop} onChange={key=>setCrop(String(key))} styles={fullWidth}><PickerItem id="crop">{t('裁切到目标边界')}</PickerItem><PickerItem id="original">{t('保留原图尺寸')}</PickerItem></Picker><div className="cutout-preview"><img src={asset((instance === 'all' ? state.segment : state.segment.instances[Number(instance)])[crop === 'crop' ? 'crop' : 'cutout'],'download')} alt={t('透明背景预览')}/></div></>}
+      <p className="dialog-description">{kind === 'image' ? t('选择一张图像建立独立项目，原图不会被修改。') : kind === 'save-detection' ? t('保存当前图像的检测框、类别、置信分数和计数。') : kind === 'import' ? t("选择照片文件夹，包含子文件夹。仅建立索引，原图不会被移动。") : kind === 'person' ? t("给朋友起一个名字，选择一张或多张仅含一张清晰人脸的参考照。") : kind === 'export' ? t("按人物复制原始照片。合照可同时进入多人的相册；请先审核自动匹配结果。") : kind === 'open' ? t("选择之前保存的 project.json，恢复照片与审核结果。") : t('选择保存目录，可导出透明抠图或原图尺寸的黑白掩码。')}</p>
+      {kind === 'save-segment' && state.segment && <><Picker label={t('导出内容')} value={output} onChange={key=>setOutput(String(key))} styles={fullWidth}><PickerItem id="cutout">{t('透明抠图')}</PickerItem><PickerItem id="mask">{t('黑白掩码')}</PickerItem></Picker><Picker label={t('导出目标')} value={instance} onChange={key=>setInstance(String(key))} styles={fullWidth}><PickerItem id="all">{t('全部目标合并')}</PickerItem>{state.segment.instances.map((_,i)=><PickerItem id={String(i)} key={i}>{t('目标 {0}',[i+1])}</PickerItem>)}</Picker><Picker isDisabled={output==='mask'} label={t('图像尺寸')} value={output==='mask'?'original':crop} onChange={key=>setCrop(String(key))} styles={fullWidth}><PickerItem id="crop">{t('裁切到目标边界')}</PickerItem><PickerItem id="original">{t('保留原图尺寸')}</PickerItem></Picker><div className="cutout-preview"><img src={asset((instance === 'all' ? state.segment : state.segment.instances[Number(instance)])[output==='mask'?'mask':crop === 'crop' ? 'crop' : 'cutout'],'download')} alt={output==='mask'?t('黑白掩码'):t('透明背景预览')}/></div></>}
       {kind === 'person' && <TextField label={t("朋友姓名")} value={name} onChange={setName} placeholder={t("例如：小明")} styles={fullWidth}/>}
       <div className="path-field"><TextField label={kind === 'person' ? t("参考照片路径（每行一张）") : kind === 'open' ? t("项目配置文件") : kind === 'image' ? t('图像文件路径') : t("文件夹路径")} value={path} onChange={v => { setPath(v); setPaths([]); }} placeholder={kind === 'open' ? 'D:\\PhotoProjects\\project.json' : t("粘贴本机路径，或使用右侧选择器")} styles={fullWidth}/><ActionButton aria-label={t("浏览本地文件")} onPress={() => choose(kind === 'person' ? 'references' : kind === 'open' || kind === 'image' ? 'file' : 'folder')}><FolderOpen /></ActionButton></div>
       {!state.desktop && <p className="microcopy">{t("当前为浏览器预览，请填写本机路径。桌面启动支持原生文件选择器。")}</p>}

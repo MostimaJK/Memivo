@@ -66,7 +66,8 @@ def create_server(application=None, port=0):
                         if content is None:
                             with Image.open(path) as image:
                                 image = ImageOps.exif_transpose(image)
-                                image.thumbnail((440, 330) if size == 'thumb' else (2200, 2200))
+                                if size != 'full':
+                                    image.thumbnail((440, 330) if size == 'thumb' else (2200, 2200))
                                 buffer = io.BytesIO()
                                 image.convert('RGB').save(buffer, format='JPEG', quality=85)
                                 content = buffer.getvalue()

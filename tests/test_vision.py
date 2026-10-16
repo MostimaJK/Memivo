@@ -133,6 +133,23 @@ class VisionTests(unittest.TestCase):
             self.assertEqual(image.size,(60,100))
             self.assertEqual(image.getpixel((15,10))[3],0)
             self.assertEqual(image.getpixel((35,45))[3],255)
+        result = self.app.snapshot()['segment']
+        folder = Path(result['directory'])
+        self.assertEqual(folder.parent, self.app.home/'segments')
+        self.assertEqual((result['width'],result['height']), (60,100))
+        for filename in ('mask.png','cutout.png','crop.png','overlay.png','instance-1-mask.png','instance-2-mask.png'):
+            self.assertTrue((folder/filename).is_file(), filename)
+        for instance in ('all', '0', '1'):
+            output = self.app.action('save-segment', {'path':str(self.root/'mask-out'),
+                                    'id':self.photo,'instance':instance,'output':'mask','crop':True})
+            with Image.open(output['path']) as image:
+                self.assertEqual(image.mode,'L')
+                self.assertEqual(image.size,(60,100))
+                self.assertEqual(image.getpixel((15,10)),255 if instance in ('all','0') else 0)
+                self.assertEqual(image.getpixel((35,45)),255 if instance in ('all','1') else 0)
+                self.assertEqual(set(np.unique(np.asarray(image))),{0,255})
+        with self.assertRaises(ValueError):
+            self.app.action('save-segment', {'path':str(self.root),'output':'invalid'})
         with self.assertRaises(ValueError):
             self.app.action('save-segment', {'path':str(self.root), 'instance':'-1'})
 

@@ -10,7 +10,7 @@ export function asset(id: string, size = 'thumb') {return `/api/image?id=${encod
 export type Face = {bbox:number[]; identity:string|null; status:string; candidates:{name:string;score:number}[]};
 export type Photo = {id:string;name:string;path:string;faces:Face[];error:string|null;processed:boolean;width?:number;height?:number};
 export type Detection = {photo:string;source:string;model:string;conf:number;iou:number;width:number;height:number;detections:{class_id:number;name:string;confidence:number;bbox:number[]}[];counts:{class_id:number;name:string;count:number}[];total:number};
-export type Segment = {photo:string;count:number;cutout:string;crop:string;overlay:string;instances:{cutout:string;crop:string;bbox:number[]}[]};
+export type Segment = {photo:string;count:number;width:number;height:number;directory:string;mask:string;cutout:string;crop:string;overlay:string;instances:{cutout:string;crop:string;mask:string;bbox:number[]}[]};
 export type Annotation = {id:string;class_id:number;type:'box'|'polygon';bbox?:number[];points?:number[][];source?:string};
 export type DatasetImage = {id:string;file_id:string;name:string;width:number;height:number;group:string;split:string;reviewed:boolean;negative:boolean;annotations:Annotation[];revision:number};
 export type Dataset = {id:string;name:string;task:'detect'|'segment';revision:number;classes:{id:number;name:string}[];images:DatasetImage[]};

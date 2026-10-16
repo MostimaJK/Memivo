@@ -1,5 +1,6 @@
+import {ImageViewport} from './ImageViewport';
 import React, {useEffect, useState} from 'react';
-import {ActionButton, Button, Text, Picker, PickerItem, NumberField, Divider} from '@react-spectrum/s2';
+import {ActionButton, Button, Text, Picker, PickerItem, NumberField, Divider, SegmentedControl, SegmentedControlItem} from '@react-spectrum/s2';
 import {style} from '@react-spectrum/s2/style' with {type:'macro'};
 import ImageIcon from '@react-spectrum/s2/icons/Image';
 import Play from '@react-spectrum/s2/icons/Play';
@@ -15,28 +16,32 @@ type Props = {state:State|null; selected:string; busy:boolean; onSelect:(id:stri
 export function DetectionWorkspace({state,selected,busy,onSelect,onImport,onSettings,onExport,onDetect,onSegment}:Props) {
     const {t}=useI18n();
     const [conf,setConf]=useState(.25), [iou,setIou]=useState(.7);
+    const [showResult,setShowResult]=useState(true);
     const [category,setCategory]=useState('all'), [active,setActive]=useState<number|null>(null);
     const photo=state?.photos.find(p=>p.id===selected);
     const result=state?.detection?.photo===selected ? state.detection : null;
     const visible=result?.detections.map((item,index)=>({...item,index})).filter(item=>category==='all'||String(item.class_id)===category)||[];
-    useEffect(()=>{setActive(null);setCategory('all');},[selected,result]);
+    const resultKey=JSON.stringify(result);
+    useEffect(()=>{setActive(null);setCategory('all');setShowResult(true);},[selected,resultKey]);
     const width=result?.width||photo?.width||1, height=result?.height||photo?.height||1;
     const chosen=active===null?null:result?.detections[active];
     return <div className="segment-layout detection-layout"><div className="segment-main">
       <div className="editor-toolbar"><Picker aria-label={t('选择图像')} value={selected||null} onChange={key=>onSelect(String(key))} placeholder={t('选择一张照片')}>
         {(state?.photos||[]).map(p=><PickerItem id={p.id} key={p.id}>{p.name}</PickerItem>)}</Picker>
         <ActionButton onPress={onImport} isDisabled={busy}>{t('导入单张图像')}</ActionButton>
+        <SegmentedControl aria-label={t('检测显示方式')} selectedKey={showResult&&result?'result':'original'} onSelectionChange={key=>setShowResult(key==='result')} isDisabled={!result}>
+          <SegmentedControlItem id="original">{t('原图')}</SegmentedControlItem><SegmentedControlItem id="result">{t('检测结果')}</SegmentedControlItem></SegmentedControl>
         {result&&<span className="microcopy">{t('显示 {0} / {1} 个目标',[visible.length,result.total])}</span>}
       </div>
-      <div className="editor-canvas detection-canvas">{photo?<div className="detection-image">
-        <img className="main-photo" src={asset(photo.id,'preview')} alt={photo.name}/>
-        <svg className="image-overlay" viewBox={`0 0 ${width} ${height}`} aria-label={t('目标检测框')}>
-          {visible.map(item=><g key={item.index} className={'detection-box '+(active===item.index?'chosen':'')} onClick={()=>setActive(item.index)}>
+      <div className="editor-canvas detection-canvas">{photo?<ImageViewport imageKey={photo.id} src={asset(photo.id,'full')} alt={photo.name} width={width} height={height}>
+        {showResult&&result&&<svg className="image-overlay detection-overlay" viewBox={`0 0 ${width} ${height}`} aria-label={t('目标检测框')}>
+          {visible.map(item=><g data-viewport-select="true" key={item.index} className={'detection-box '+(active===item.index?'chosen':'')} onClick={()=>setActive(item.index)}>
             <rect x={item.bbox[0]} y={item.bbox[1]} width={item.bbox[2]-item.bbox[0]} height={item.bbox[3]-item.bbox[1]} stroke={active===item.index?'#ffd580':'#8bc9ff'} strokeWidth={2} vectorEffect="non-scaling-stroke" fill="transparent"/>
-            <text x={item.bbox[0]+3} y={Math.max(height/35,item.bbox[1]-height/100)} fill="white" stroke="#202124" strokeWidth={Math.max(.5,width/1600)} paintOrder="stroke" fontSize={Math.max(12,width/65)}>{item.index+1} · {item.name} {Math.round(item.confidence*100)}%</text>
+            <text x={item.bbox[0]} y={item.bbox[1]} dy="-0.35em" fill="white" stroke="#202124" paintOrder="stroke" style={{fontSize:'calc(12px / var(--image-scale))',strokeWidth:'calc(3px / var(--image-scale))'}}>{item.index+1} · {item.name} {Math.round(item.confidence*100)}%</text>
           </g>)}
-        </svg>
-      </div>:<div className="canvas-empty"><ImageIcon/><h3>{t('看见每一个目标')}</h3><p>{t('导入图像，检测位置，并按类别统计数量。')}</p><Button variant="secondary" onPress={onImport}>{t('导入单张图像')}</Button></div>}</div>
+        </svg>}
+      </ImageViewport>:<div className="canvas-empty"><ImageIcon/><h3>{t('看见每一个目标')}</h3><p>{t('导入图像，检测位置，并按类别统计数量。')}</p><Button variant="secondary" onPress={onImport}>{t('导入单张图像')}</Button></div>}</div>
+      {result&&<div className="result-strip" role="status"><strong>{t('检测完成 · {0} 个目标',[result.total])}</strong><span>{result.counts.map(c=>`${c.name} × ${c.count}`).join(' · ')||t('未检测到目标，可调整阈值或更换模型。')}</span></div>}
       <div className="canvas-caption"><span>{photo?.name||t('尚未选择图像')}</span><span>{result?t('检测结果仅代表当前图像'):t('尚未运行检测')}</span></div>
     </div><aside className="segment-controls detection-controls"><div className="panel-heading"><ImageIcon/><h3>{t('检测与计数')}</h3></div>
       <p className="muted">{t('通用模型识别人等已有类别；自定义权重识别你训练的物品。')}</p>

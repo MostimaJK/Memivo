@@ -155,6 +155,17 @@ class Application:
             self.task.update(done=done, total=total, message=message)
 
     def action(self, route, data):
+        if route == 'segment-open':
+            if os.name != 'nt' or self.window is None:
+                raise ValueError('请在桌面程序中打开结果文件夹。')
+            with self.lock:
+                if not self.segment or data.get('id') != self.segment['photo']:
+                    raise ValueError('请先生成当前图像的分割结果。')
+                folder = Path(self.segment['directory']).resolve()
+            if folder.parent != (self.home/'segments').resolve() or not folder.is_dir():
+                raise ValueError('结果文件夹不可用。')
+            os.startfile(folder)
+            return {'ok': True}
         if route == 'models-scan':
             self.require_idle()
             return self.refresh_models()
@@ -295,14 +306,18 @@ class Application:
                         raise ValueError('请选择有效的分割目标。')
                     result = self.segment['instances'][index]
                 import shutil
-                target = Path(data['path']) / f'segment_{uuid.uuid4().hex[:10]}.png'
+                output = data.get('output', 'cutout')
+                if output not in ('cutout', 'mask'):
+                    raise ValueError('请选择透明抠图或黑白掩码。')
+                key = 'mask' if output == 'mask' else ('crop' if data.get('crop') else 'cutout')
+                target = Path(data['path']).expanduser().resolve() / f'{output}_{uuid.uuid4().hex[:10]}.png'
                 target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(self.files[result['crop'] if data.get('crop') else result['cutout']], target)
+                shutil.copy2(self.files[result[key]], target)
                 return {'path': str(target)}
             elif route == 'save-detection':
                 if not self.detection or data.get('id') != self.detection['photo']:
                     raise ValueError('请先检测当前图像。')
-                target = Path(data['path']) / f'detection_{uuid.uuid4().hex[:10]}.json'
+                target = Path(data['path']).expanduser().resolve() / f'detection_{uuid.uuid4().hex[:10]}.json'
                 save_json(target, self.detection)
                 return {'path': str(target)}
             else:
@@ -540,28 +555,37 @@ class Application:
             rgba = original.convert('RGBA')
             rgba.putalpha(Image.fromarray(combined.astype(np.uint8)*255))
             run_id = uuid.uuid4().hex
-            cutout = work / f'{run_id}.png'
+            output_dir = work / run_id
+            output_dir.mkdir()
+            mask_path = output_dir / 'mask.png'
+            Image.fromarray(combined.astype(np.uint8)*255).save(mask_path)
+            cutout = output_dir / 'cutout.png'
             rgba.save(cutout)
-            crop = work / f'{run_id}-crop.png'
+            crop = output_dir / 'crop.png'
             rgba.crop(rgba.getbbox()).save(crop)
             instances = []
             for index, mask in enumerate(masks):
                 item = original.convert('RGBA')
                 item.putalpha(Image.fromarray(mask.astype(np.uint8)*255))
-                item_path = work / f'{run_id}-{index}.png'
-                crop_path = work / f'{run_id}-{index}-crop.png'
+                item_path = output_dir / f'instance-{index+1}.png'
+                crop_path = output_dir / f'instance-{index+1}-crop.png'
+                item_mask_path = output_dir / f'instance-{index+1}-mask.png'
+                Image.fromarray(mask.astype(np.uint8)*255).save(item_mask_path)
                 bounds = item.getbbox()
                 item.save(item_path)
                 item.crop(bounds).save(crop_path)
-                instances.append(dict(cutout=self.register(item_path), crop=self.register(crop_path), bbox=list(bounds)))
+                instances.append(dict(cutout=self.register(item_path), crop=self.register(crop_path),
+                                      mask=self.register(item_mask_path), bbox=list(bounds)))
             overlay = np.asarray(original).copy()
             overlay[combined] = (overlay[combined]*.45 + np.array([78,160,255])*.55).astype(np.uint8)
-            overlay_path = work / f'{run_id}-overlay.png'
+            overlay_path = output_dir / 'overlay.png'
             Image.fromarray(overlay).save(overlay_path)
             with self.lock:
                 if self.cancel.is_set():
                     return '分割已停止，原结果保持不变。'
                 self.segment = dict(photo=data['id'], count=len(masks), instances=instances,
-                                    cutout=self.register(cutout), crop=self.register(crop), overlay=self.register(overlay_path))
+                                    width=width, height=height, directory=str(output_dir.resolve()),
+                                    mask=self.register(mask_path), cutout=self.register(cutout),
+                                    crop=self.register(crop), overlay=self.register(overlay_path))
             return f'分割完成：{len(masks)} 个掩码，可导出透明 PNG。'
         return self.start_task('SAM3 分割', operation)

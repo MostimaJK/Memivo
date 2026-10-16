@@ -1,4 +1,5 @@
 import json
+import io
 import tempfile
 import threading
 import unittest
@@ -157,6 +158,13 @@ class DesktopTests(unittest.TestCase):
             with get('/api/image?id='+data['photos'][0]['id']) as response:
                 self.assertEqual(response.headers['Content-Type'],'image/jpeg')
                 self.assertTrue(response.read().startswith(b'\xff\xd8'))
+            large=self.root/'full-size.jpg'
+            exif=Image.Exif();exif[274]=6
+            Image.new('RGB',(2600,600),'blue').save(large,exif=exif)
+            image_id=self.app.register(large)
+            with get('/api/image?id='+image_id+'&size=full') as response:
+                with Image.open(io.BytesIO(response.read())) as image:
+                    self.assertEqual(image.size,(600,2600))
             with self.assertRaises(urllib.error.HTTPError):
                 get('/api/image?id=../../README.md')
             with self.assertRaises(urllib.error.HTTPError):

@@ -8,7 +8,7 @@ Memivo 是一款在本機執行的桌面影像工作台，整合人物相簿、�
 
 以 **Python + React + TypeScript + Adobe React Spectrum 2** 建構，透過 pywebview 與系統 WebView2 提供桌面介面。照片留在本機處理；AI 引擎與模型權重僅在使用者要求時下載。
 
-**目前版本：v0.3.3 Preview · Windows x64**
+**目前版本：v0.3.4 Preview · Windows x64**
 
 [第一次使用](#first-use) · [環境需求](#requirements) · [功能截圖](#screenshots) · [原始碼啟動](#from-source) · [授權說明](#licensing)
 
@@ -47,6 +47,8 @@ Memivo 是一款在本機執行的桌面影像工作台，整合人物相簿、�
 
 <a id="requirements"></a>
 
+圖像畫布、遮罩保存位置與匯出方式見 [圖片工作臺指南](docs/IMAGE_WORKSPACES.md)。
+
 ## 環境需求
 
 | 項目 | EXE 預覽包 | 原始碼啟動 |
@@ -63,7 +65,7 @@ Memivo 是一款在本機執行的桌面影像工作台，整合人物相簿、�
 
 ## 下載與啟動
 
-在另一台 Windows 電腦使用時，建議下載 [Windows 預覽版 ZIP](https://github.com/MostimaJK/Memivo/releases/download/v0.3.3-preview/Memivo-0.3.3-preview-windows-x64.zip)。
+在另一台 Windows 電腦使用時，建議下載 [Windows 預覽版 ZIP](https://github.com/MostimaJK/Memivo/releases/download/v0.3.4-preview/Memivo-0.3.4-preview-windows-x64.zip)。
 
 1. 安裝 **Python 3.12 x64** 與 **Microsoft Edge WebView2 Runtime**。輕量啟動器使用 Windows 10/11 上的 .NET Framework 4.x。
 2. 將**整個 ZIP** 解壓縮至可寫入的資料夾，讓 `Memivo.exe`、`app/` 與 `model/` 維持同一層。
