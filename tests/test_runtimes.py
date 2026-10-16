@@ -145,6 +145,35 @@ class RuntimeTests(unittest.TestCase):
         self.assertLess(time.monotonic()-started,8)
         self.assertIsNone(self.manager.process)
 
+    def test_real_subprocess_failure_preserves_traceback_and_survives_restart(self):
+        with self.assertRaisesRegex(RuntimeError,'test-only subprocess failure'):
+            self.manager.run([sys.executable,'-c',"raise ValueError('test-only subprocess failure')"],lambda:False,timeout=5)
+        snapshot=self.manager.snapshot()
+        log=Path(snapshot['log_file'])
+        self.assertEqual(log.parent,self.manager.log_root)
+        self.assertIn('Traceback',log.read_text(encoding='utf-8'))
+        self.assertEqual(snapshot['last_failure']['returncode'],1)
+        restored=RuntimeManager(self.root).snapshot()
+        self.assertEqual(restored['last_failure'],snapshot['last_failure'])
+
+    def test_cpu_engine_rejects_cuda_before_spawning_for_all_job_payloads(self):
+        target=self.manager.directory('vision');target.mkdir()
+        python=self.manager.executable('vision');python.parent.mkdir(parents=True);python.touch()
+        self.manager.save('vision',state='ready',profile='cpu')
+        for payload in ({'device':'cuda'},{'config':{'device':'cuda'}},{'options':{'device':'cuda'}}):
+            with self.subTest(payload=payload),patch.object(self.manager,'run') as run:
+                with self.assertRaisesRegex(ValueError,'CPU'):
+                    self.manager.job('vision','detect',payload,lambda:False,lambda *a:None)
+                run.assert_not_called()
+
+    def test_application_exception_has_persistent_traceback(self):
+        app=Application(self.root/'app')
+        def fail():raise ValueError('test-only application failure')
+        app.start_task('test-only',fail);app.worker.join(5)
+        self.assertEqual(app.task['state'],'failed')
+        log=Path(app.task['log_file'])
+        self.assertIn('ValueError: test-only application failure',log.read_text(encoding='utf-8'))
+
     def test_job_uses_managed_interpreter_and_private_json_contract(self):
         target=self.manager.directory('vision');target.mkdir()
         python=self.manager.executable('vision');python.parent.mkdir(parents=True);python.touch()

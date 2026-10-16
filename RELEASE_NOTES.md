@@ -1,20 +1,18 @@
-# Memivo v0.3.4 Preview
+# Memivo v0.3.5 Preview
 
-## Image workspaces
+## Engine mismatch and diagnostic fixes
 
-- Share a fit-to-canvas image viewer between segmentation and detection, with cursor-centered wheel zoom, drag pan and Reset view / 0 shortcut. Space or middle-drag allows panning while annotating.
-- Keep prompts and detection boxes aligned to original image coordinates, preserve the camera when comparing result views, and keep detection labels readable at fit scale.
-- Add Original / Overlay / Binary mask / Transparent cutout segmentation views and Original / Results detection views. Show detection boxes, confidence labels and class counts together.
-- Save combined and per-instance binary masks alongside transparent cutouts, crops and overlays in separate result folders. Surface segmentation success, object count, the results path and a desktop Open folder action.
-- Export either transparent PNGs or original-size binary masks, and show the exact saved path. Display asynchronous task errors clearly; failed or cancelled runs preserve the last successful result.
-- Load full-resolution, EXIF-corrected images in the workspaces. See docs/IMAGE_WORKSPACES.md for controls and storage locations.
+- Reject CUDA jobs before spawning when the managed engine is CPU-only, including detection, segmentation, training and face jobs. Show mismatched device settings in Feature center.
+- Preserve subprocess traceback details and exit codes instead of only reporting a generic engine failure. Write full output under the application data directory's runtimes/logs and retain the latest failure across restarts.
+- Display failure details directly in detection and segmentation workspaces, with engine-configuration and log-folder actions. Failed tasks use a red footer indicator.
+- Add Copy log and Select all actions with selectable read-only text. Enable text selection in the native desktop host; image dragging remains separate. Clipboard fallback selects the text and prompts Ctrl+C.
 
-## Update
+## Fixing torch +cpu / Invalid CUDA device errors
 
-Extract the complete `Memivo-0.3.4-preview-windows-x64.zip`, or update source and run start_memivo.bat. Existing AI engines and model weights can be reused; this update does not require reinstalling GPU engines. External Python 3.10–3.12 (3.12 x64 recommended) and WebView2 are required for the Windows package.
+An existing CPU engine does not become GPU-enabled after updating the app. Uninstall the visual AI engine in Feature center, select NVIDIA CUDA 12.8, and install. Wait for GPU verification, then select NVIDIA CUDA in Settings. Model weights are retained. Alternatively choose CPU in Settings to test the workflow with the current CPU engine.
 
 ## Validation
 
-54 tests pass; one Windows symlink-permission test is skipped. Tests include binary-mask pixels, combined/per-instance export, original dimensions, EXIF-correct full-resolution serving and previous-result preservation. Frontend build and localization checks pass. Browser interaction tests use synthetic photos and explicit model doubles; real SAM3/YOLO accuracy and target GPU inference are not established by these checks.
+57 tests pass, one Windows symlink-permission test is skipped. A real official YOLO26n model was run through the managed-worker path on the existing CPU environment; it returned four objects on a local photo. The CPU/CUDA exception was reproduced with a deliberately mismatched test record to verify complete error capture. Target RTX 5070 Ti inference remains to be tested. Build, localization and diagnostic copy interaction are checked separately.
 
-Original Memivo code and documentation use GPL-3.0-only. The Windows package includes corresponding project source, LICENSE and NOTICE. Third-party model and library terms apply separately.
+Extract the complete Memivo-0.3.5-preview-windows-x64.zip, or update source and run start_memivo.bat. Requires external Python 3.10–3.12 and WebView2. GPL-3.0-only applies to original code; corresponding source, LICENSE and NOTICE are included. Third-party terms apply separately.

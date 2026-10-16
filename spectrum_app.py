@@ -28,7 +28,7 @@ def main():
                 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('Memivo.Desktop')
             import webview
             window = webview.create_window(server.app.window_title, server.url,
-                                          width=1480, height=960, min_size=(1040, 700))
+                                          width=1480, height=960, min_size=(1040, 700), text_select=True)
             server.app.window = window
             window.events.shown += lambda: print('MEMIVO_WINDOW_READY',flush=True)
             if os.name == 'nt':

@@ -20,6 +20,8 @@ import sys
 import tempfile
 import threading
 import time
+import uuid
+import traceback
 
 from album.core import save_json
 
@@ -97,6 +99,15 @@ class RuntimeManager:
         self.root.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
         self.logs = deque(maxlen=80)
+        self.log_root = self.root / 'logs'
+        self.log_root.mkdir(exist_ok=True)
+        self.last_log_file = ''
+        self.last_failure = None
+        try:
+            self.last_failure = json.loads((self.log_root/'last-failure.json').read_text(encoding='utf-8'))
+            self.last_log_file = self.last_failure.get('log_file', '')
+        except (OSError, ValueError, AttributeError):
+            self.last_failure=None
         self.hardware = None
         self.records = {}
         self.process = None
@@ -131,7 +142,8 @@ class RuntimeManager:
         with self.lock:
             return dict(hardware=self.hardware, engines=[dict(id=feature, **self.records.get(feature, {'state':'missing'}),
                        available=self.python_for(feature) is not None) for feature in FEATURES],
-                       logs=list(self.logs), last_feature=self.last_feature, root=str(self.root))
+                       logs=list(self.logs), last_feature=self.last_feature, root=str(self.root),
+                       log_root=str(self.log_root), log_file=self.last_log_file, last_failure=self.last_failure)
 
     def log(self, line):
         with self.lock:
@@ -142,6 +154,19 @@ class RuntimeManager:
             record = dict(self.records.get(feature, {}), feature=feature, **changes)
             save_json(self.directory(feature) / '.memivo-runtime.json', record)
             self.records[feature] = record
+
+    def capture_exception(self, operation, error):
+        """Keep diagnostics even for failures outside a managed subprocess."""
+        if self.last_failure and self.last_failure.get('message') == str(error):
+            return self.last_failure.get('log_file', '')
+        path=self.log_root/(time.strftime('%Y%m%d-%H%M%S')+'-'+uuid.uuid4().hex[:10]+'-task.log')
+        path.write_text(f'Memivo task: {operation}\n'+traceback.format_exc(),encoding='utf-8')
+        failure=dict(message=str(error),log_file=str(path),time=time.strftime('%Y-%m-%d %H:%M:%S'),operation=operation)
+        with self.lock:
+            self.last_log_file=str(path)
+            self.last_failure=failure
+        save_json(self.log_root/'last-failure.json',failure)
+        return str(path)
 
     def scan(self):
         info = probe_hardware(self.root)
@@ -163,14 +188,26 @@ class RuntimeManager:
         env['YOLO_CONFIG_DIR']=str(self.root/'ultralytics-settings')
         env['MPLCONFIGDIR']=str(self.root/'matplotlib-settings')
         env['YOLO_AUTOINSTALL']='false'
-        process = subprocess.Popen([str(c) for c in command], cwd=ROOT,
+        log_path = self.log_root / (time.strftime('%Y%m%d-%H%M%S')+'-'+uuid.uuid4().hex[:10]+'.log')
+        output_log = log_path.open('w', encoding='utf-8', buffering=1)
+        output_log.write('Memivo engine subprocess\n')
+        with self.lock:
+            self.last_log_file = str(log_path)
+        try:
+            process = subprocess.Popen([str(c) for c in command], cwd=ROOT,
                                    env=env, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace',
                                    **child_options())
+        except Exception:
+            output_log.close()
+            raise
         with self.lock:
             self.process = process
+        tail = deque(maxlen=12)
         def consume():
             for line in process.stdout:
+                output_log.write(line)
+                if line.strip():tail.append(line.strip())
                 if line.startswith('MEMIVO_PROGRESS:') and progress:
                     try:
                         progress(*json.loads(line.removeprefix('MEMIVO_PROGRESS:')))
@@ -189,13 +226,21 @@ class RuntimeManager:
                     raise RuntimeError('Operation cancelled.' if cancelled() else 'Operation timed out.')
                 time.sleep(.1)
             reader.join(5)
-            if process.returncode:
-                raise RuntimeError('Engine command failed. See the installation/task log for details.')
             if cancelled():
                 raise RuntimeError('Operation cancelled.')
+            if process.returncode:
+                detail='\n'.join(tail)[-2400:] or 'No output was produced by the subprocess.'
+                message=f'Engine command failed (exit {process.returncode}).\n{detail}\nLog: {log_path}'
+                failure=dict(message=message,returncode=process.returncode,log_file=str(log_path),
+                             time=time.strftime('%Y-%m-%d %H:%M:%S'),feature=self.last_feature)
+                with self.lock:
+                    self.last_failure=failure
+                save_json(self.log_root/'last-failure.json',failure)
+                raise RuntimeError(message)
         finally:
             reader.join(2)
             process.stdout.close()
+            output_log.close()
             with self.lock:
                 self.process = None
 
@@ -286,6 +331,14 @@ class RuntimeManager:
         python = self.python_for(feature)
         if python is None:
             raise ValueError('可选引擎尚未就绪，请先在功能中心安装。')
+        with self.lock:
+            self.last_feature=feature
+            self.logs.clear()
+            self.last_log_file=''
+        device=payload.get('device',payload.get('config',{}).get('device',payload.get('options',{}).get('device','cpu')))
+        self.log(f'Engine: {feature}; action: {action}; device: {device}; profile: {self.records.get(feature,{}).get("profile")}')
+        if device == 'cuda' and self.records.get(feature,{}).get('profile') != 'cu128':
+            raise ValueError('当前引擎为 CPU 版，但执行设备设为 NVIDIA CUDA。请安装 NVIDIA 引擎，或在设置中改用 CPU。')
         with tempfile.TemporaryDirectory(prefix='job-',dir=self.root) as folder:
             request, result = Path(folder)/'request.json', Path(folder)/'result.json'
             save_json(request,dict(action=action,payload=payload,result=str(result)))

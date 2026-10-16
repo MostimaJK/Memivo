@@ -44,3 +44,19 @@ GPU 人脸环境采用 ONNX Runtime GPU 1.23.2、CUDA 12.8 运行库与 cuDNN 9.
 此版本通过安装配方、GPU 失败状态及任务设备传递测试；本机不具备目标 GPU，RTX 5070 Ti 实际推理仍需目标机验证。安装时执行的 CUDA 卷积检查不能代替完整模型的实际测试。
 
 参考：[ONNX Runtime CUDA 依赖与 DLL 加载](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html)、[NVIDIA cuDNN 支持矩阵](https://docs.nvidia.com/deeplearning/cudnn/backend/v9.10.1/reference/support-matrix.html)。
+
+## CPU 引擎误配 CUDA 与诊断日志
+
+如果日志显示 `torch-2.9.1+cpu`、`Invalid CUDA device=0`、`torch.cuda.is_available(): False`，当前解释器装的是 CPU 版 PyTorch，却被要求使用 CUDA。更换主程序或修改设置不会将已有 CPU 引擎自动升级为 GPU 版。
+
+解决办法：先停止任务，在功能中心卸载视觉 AI 引擎，选择 NVIDIA CUDA 12.8 并重新安装，等待 GPU 计算验证成功。模型权重保留。若只想先验证工作流程，可在设置中改为 CPU 后重试。人物引擎也需按其独立方案选择；两套环境不互相替代。
+
+新版会在受管理引擎启动推理前检查已安装方案与任务设备，不匹配时直接说明。功能中心也会显示配置不匹配警告。
+
+诊断日志支持“复制日志”和“全选日志”，文本框只读但可以框选及 Ctrl+C；复制不修改原日志。桌面宿主开启文字选择，画布仍保留专用拖拽行为。若系统限制剪贴板，按钮会全选并提示手动复制。
+
+子进程完整输出保存在应用数据目录的 `runtimes/logs/`，并保留最近失败记录。Windows EXE 默认是 `%LOCALAPPDATA%/Memivo/data/runtimes/logs/`；源码默认是 `.segmentflow/runtimes/logs/`。界面显示的路径为准，可以点击“打开日志文件夹”。这些日志保存在本机，不自动上传；其中可能包含本机路径，分享前可自行检查。
+
+检测与分割工作台会直接显示失败原因、日志复制入口以及配置入口；底部失败状态为红色。新结果未生成时保留上一次成功结果，并明确提示本次失败。当前的复制按钮复制界面中的诊断摘要和最近输出，完整原始输出请取日志文件。
+
+本机复用了已安装的 CPU 引擎，以官方 YOLO26n 权重实际检测，并复现 CPU/CUDA 误配异常，验证提前拦截、日志落盘与错误详情；这不代表在 RTX 5070 Ti 上完成了真实推理测试。

@@ -140,8 +140,12 @@ class Application:
                         self.task.update(state='cancelled' if stopped else 'completed',
                                          message=message or ('已停止' if stopped else '完成'))
                 except Exception as exc:
+                    try:
+                        log_file=self.runtimes.last_log_file if self.cancel.is_set() else self.runtimes.capture_exception(kind,exc)
+                    except Exception:
+                        log_file=''
                     with self.lock:
-                        self.task.update(state='cancelled' if self.cancel.is_set() else 'failed', message=str(exc), error=str(exc))
+                        self.task.update(state='cancelled' if self.cancel.is_set() else 'failed', message=str(exc), error=str(exc),log_file=log_file)
                 finally:
                     with self.lock:
                         self.history.append(dict(self.task, seconds=round(time.perf_counter()-started, 2),
@@ -155,6 +159,11 @@ class Application:
             self.task.update(done=done, total=total, message=message)
 
     def action(self, route, data):
+        if route == 'diagnostics-open':
+            if os.name != 'nt' or self.window is None:
+                raise ValueError('请在桌面程序中打开日志文件夹。')
+            os.startfile(self.runtimes.log_root)
+            return {'ok':True}
         if route == 'segment-open':
             if os.name != 'nt' or self.window is None:
                 raise ValueError('请在桌面程序中打开结果文件夹。')

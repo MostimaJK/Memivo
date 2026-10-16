@@ -1,3 +1,4 @@
+import {LogPanel,diagnosticText} from './LogPanel';
 import {ModelCenter} from './ModelCenter';
 import React,{useEffect,useState,useRef} from 'react';
 import {ActionButton,Button,Text,Picker,PickerItem,StatusLight,DialogContainer,Dialog,Heading,Content,ButtonGroup} from '@react-spectrum/s2';
@@ -32,11 +33,12 @@ export function FeatureCenter({state,busy,onAction}:{state:State|null;busy:boole
         <p className="microcopy">{id==='vision'?t('CPU 约 1–3 GB，NVIDIA 约 4–10 GB；均为估算，不含模型。'):t('支持 CPU 与 NVIDIA CUDA 12.8；自动方案根据显卡与驱动选择，安装后验证实际计算。')}</p>
         <p className="microcopy">{t('安装后请在设置中选择执行设备：CPU 或 NVIDIA CUDA。')}</p>
         {id==='face'&&<p className="microcopy">{t('模型权重与引擎分开安装；部分电脑需要 Microsoft C++ 构建工具。')}</p>}
+        {installed&&engine?.profile==='cpu'&&state?.config.device==='cuda'&&<p className="engine-error" role="alert">{t('当前引擎为 CPU 版，但执行设备设为 NVIDIA CUDA。请安装 NVIDIA 引擎，或在设置中改用 CPU。')}</p>}
         {engine?.state==='failed'&&<p className="engine-error" role="alert">{t(engine.error||'安装未完成，请查看诊断日志后重试。')}</p>}
         <div className="engine-actions"><Button variant={installed?'secondary':'accent'} isDisabled={busy||!hardware} onPress={()=>installed?setRemove(id):onAction('engine-install',{feature:id,profile:profile[id]})}>{installed?t('卸载引擎'):engine?.state==='failed'?t('重试安装'):t('安装引擎')}</Button>{!installed&&engine?.state==='failed'&&<ActionButton isDisabled={busy} onPress={()=>setRemove(id)}>{t('清理未完成环境')}</ActionButton>}</div>
       </article>;
     })}</div>{state&&<ModelCenter state={state} busy={busy} onAction={onAction}/>}<section className="feature-notes"><h3>{t('你的数据独立保存')}</h3><p>{t('安装需要联网下载依赖。模型权重另行选择；卸载只移除本程序创建的引擎环境，保留照片、标注、模型和项目。')}</p><p>{t('暂不自动安装显卡驱动、系统 Python 或完整 CUDA Toolkit；不兼容时提供原因，可改用 CPU。')}</p><p>{t('安装引擎后，可在训练工作台使用已确认的数据集版本。')}</p></section>
-      <details className="engine-logs"><summary>{t('诊断日志')}</summary><p className="microcopy">{runtime?.root}</p><pre aria-live="polite">{runtime?.logs.length?runtime.logs.join('\n'):t('安装与推理诊断将在这里显示。')}</pre></details>
+      <details className="engine-logs"><summary>{t('诊断日志')}</summary><p className="microcopy">{runtime?.log_root||runtime?.root}</p><LogPanel text={diagnosticText(state)}/>{state?.desktop&&<ActionButton onPress={()=>onAction('diagnostics-open')}>{t('打开日志文件夹')}</ActionButton>}</details>
       <DialogContainer onDismiss={()=>setRemove(null)}>{remove&&<Dialog><Heading slot="title">{t('卸载可选引擎')}</Heading><Content><p>{remove==='vision'?t('YOLO 与 SAM3 共用此引擎，卸载后两者都需要重新安装才能使用。'):t('卸载后人物识别需要重新安装引擎。')}</p><p>{t('照片、模型权重与项目数据保留。')}</p></Content><ButtonGroup><Button variant="secondary" onPress={()=>setRemove(null)}>{t('取消')}</Button><Button variant="negative" isDisabled={busy} onPress={()=>{onAction('engine-uninstall',{feature:remove});setRemove(null);}}>{t('卸载引擎')}</Button></ButtonGroup></Dialog>}</DialogContainer>
     </div>;
 }

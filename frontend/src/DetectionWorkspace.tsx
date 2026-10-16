@@ -1,3 +1,4 @@
+import {TaskDiagnostics} from './LogPanel';
 import {ImageViewport} from './ImageViewport';
 import React, {useEffect, useState} from 'react';
 import {ActionButton, Button, Text, Picker, PickerItem, NumberField, Divider, SegmentedControl, SegmentedControlItem} from '@react-spectrum/s2';
@@ -10,10 +11,10 @@ import {useI18n} from './i18n';
 
 const full = style({width:'full'});
 type Props = {state:State|null; selected:string; busy:boolean; onSelect:(id:string)=>void;
-    onImport:()=>void; onSettings:()=>void; onExport:()=>void;
+    onImport:()=>void; onSettings:()=>void; onExport:()=>void; onFeatures:()=>void; onOpenLogs:()=>void;
     onDetect:(options:unknown)=>void; onSegment:(bbox:number[])=>void};
 
-export function DetectionWorkspace({state,selected,busy,onSelect,onImport,onSettings,onExport,onDetect,onSegment}:Props) {
+export function DetectionWorkspace({state,selected,busy,onSelect,onImport,onSettings,onExport,onFeatures,onOpenLogs,onDetect,onSegment}:Props) {
     const {t}=useI18n();
     const [conf,setConf]=useState(.25), [iou,setIou]=useState(.7);
     const [showResult,setShowResult]=useState(true);
@@ -33,6 +34,7 @@ export function DetectionWorkspace({state,selected,busy,onSelect,onImport,onSett
           <SegmentedControlItem id="original">{t('原图')}</SegmentedControlItem><SegmentedControlItem id="result">{t('检测结果')}</SegmentedControlItem></SegmentedControl>
         {result&&<span className="microcopy">{t('显示 {0} / {1} 个目标',[visible.length,result.total])}</span>}
       </div>
+      <TaskDiagnostics state={state} kind="目标检测" onFeatures={onFeatures} onOpen={onOpenLogs}/>
       <div className="editor-canvas detection-canvas">{photo?<ImageViewport imageKey={photo.id} src={asset(photo.id,'full')} alt={photo.name} width={width} height={height}>
         {showResult&&result&&<svg className="image-overlay detection-overlay" viewBox={`0 0 ${width} ${height}`} aria-label={t('目标检测框')}>
           {visible.map(item=><g data-viewport-select="true" key={item.index} className={'detection-box '+(active===item.index?'chosen':'')} onClick={()=>setActive(item.index)}>

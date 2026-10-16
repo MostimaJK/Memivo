@@ -543,5 +543,16 @@
   "请选择透明抠图或黑白掩码。": "Choose a transparent cutout or binary mask.",
   "选择保存目录，可导出透明抠图或原图尺寸的黑白掩码。": "Choose a folder to export transparent cutouts or original-size binary masks.",
   "拖动平移图像": "Drag to pan the image",
-  "上次分割结果 · {0} 个目标": "Previous segmentation · {0} objects"
+  "上次分割结果 · {0} 个目标": "Previous segmentation · {0} objects",
+  "复制日志": "Copy log",
+  "全选日志": "Select all",
+  "日志已复制。": "Log copied.",
+  "已全选日志，请按 Ctrl+C 复制。": "Log selected. Press Ctrl+C to copy.",
+  "诊断日志文本": "Diagnostic log text",
+  "运行失败，未生成新结果": "Run failed; no new result was generated",
+  "查看引擎配置": "View engine configuration",
+  "打开日志文件夹": "Open log folder",
+  "请在桌面程序中打开日志文件夹。": "Open the log folder from the desktop app.",
+  "当前引擎为 CPU 版，但执行设备设为 NVIDIA CUDA。请安装 NVIDIA 引擎，或在设置中改用 CPU。": "The installed engine is CPU-only, but the execution device is NVIDIA CUDA. Install the NVIDIA engine or select CPU in Settings.",
+  "展开诊断日志": "Expand diagnostic log"
 }
