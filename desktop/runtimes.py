@@ -67,12 +67,19 @@ def probe_hardware(home):
             output = subprocess.run([command, '--query-gpu=name,driver_version,memory.total,compute_cap',
                                      '--format=csv,noheader,nounits'], capture_output=True,
                                     text=True, timeout=10, **child_options())
+            if output.returncode:
+                raise ValueError('nvidia-smi GPU query failed: ' + (output.stderr or output.stdout).strip()[:500])
             for row in csv.reader(io.StringIO(output.stdout)):
                 if len(row) == 4:
                     info['gpus'].append(dict(name=row[0].strip(), driver=row[1].strip(),
                                              memory_mb=int(float(row[2])), capability=float(row[3])))
             summary = subprocess.run([command], capture_output=True, text=True, timeout=10, **child_options())
-            version = re.search(r'CUDA Version:\s*(\d+)\.(\d+)', summary.stdout)
+            if summary.returncode:
+                raise ValueError('nvidia-smi summary failed: ' + (summary.stderr or summary.stdout).strip()[:500])
+            version = re.search(r'CUDA\s+(?:UMD\s+)?Version\s*:\s*(\d+)\.(\d+)', summary.stdout, re.IGNORECASE)
+            if version is None:
+                info['diagnostic'] = 'Could not read CUDA / CUDA UMD Version from nvidia-smi; GPU compatibility is unconfirmed.'
+                return info
             maximum = tuple(map(int, version.groups())) if version else (0, 0)
             info['driver_cuda_max'] = '.'.join(map(str, maximum))
             # Conservative candidate only. Actual tensor and torchvision checks are mandatory.

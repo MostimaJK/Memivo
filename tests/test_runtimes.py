@@ -164,6 +164,34 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(hardware['recommended'],'cpu')
         self.assertFalse(hardware['cuda_candidate'])
 
+    def test_nvidia_legacy_and_umd_version_formats(self):
+        query='NVIDIA GeForce RTX 5070 Ti, 617.42, 16303, 12.0\n'
+        for header,version in [('CUDA Version: 12.8','12.8'),
+                               ('NVIDIA-SMI 617.42 KMD Version: 617.42 CUDA UMD Version: 13.4','13.4'),
+                               ('CUDA UMD Version : 13.4','13.4')]:
+            with self.subTest(header=header), \
+                 patch('desktop.runtimes.shutil.which',return_value='nvidia-smi'), \
+                 patch('desktop.runtimes.subprocess.run',side_effect=[
+                     subprocess.CompletedProcess([],0,query,''),subprocess.CompletedProcess([],0,header,'')]):
+                hardware=probe_hardware(self.root)
+                self.assertEqual(hardware['driver_cuda_max'],version)
+                self.assertTrue(hardware['cuda_candidate'])
+                self.assertEqual(hardware['recommended'],'cu128')
+
+    def test_nvidia_old_unknown_or_failed_driver_probe_not_approved(self):
+        query=subprocess.CompletedProcess([],0,'NVIDIA GeForce RTX 5070 Ti, 617.42, 16303, 12.0\n','')
+        for summary in [subprocess.CompletedProcess([],0,'CUDA Version: 12.7',''),
+                        subprocess.CompletedProcess([],0,'CUDA UMD Version: N/A',''),
+                        subprocess.CompletedProcess([],1,'','driver query failed')]:
+            with self.subTest(summary=summary), \
+                 patch('desktop.runtimes.shutil.which',return_value='nvidia-smi'), \
+                 patch('desktop.runtimes.subprocess.run',side_effect=[query,summary]):
+                hardware=probe_hardware(self.root)
+                self.assertFalse(hardware['cuda_candidate'])
+                self.assertEqual(hardware['recommended'],'cpu')
+                if '12.7' not in summary.stdout:
+                    self.assertTrue(hardware.get('diagnostic'))
+
     def test_real_worker_process_in_isolated_environment_with_model_double(self):
         # A genuine venv + subprocess/JSON round-trip. Only the model is synthetic.
         import PIL

@@ -17,6 +17,8 @@ export function FeatureCenter({state,busy,onAction}:{state:State|null;busy:boole
       <div className="feature-heading"><div><h2>{t('让功能按需生长')}</h2><p className="muted">{t('保留轻量主界面，需要时再安装独立 AI 引擎。')}</p></div><ActionButton isDisabled={busy} onPress={()=>onAction('environment-detect')}>{t('重新检测')}</ActionButton></div>
       {hardware?<><div className="hardware-facts"><span>{hardware.os} · {hardware.architecture}</span><span>Python {hardware.python}</span><span>{t('可用磁盘 {0} GB',[hardware.free_gb])}</span></div>
         {hardware.gpus.map((gpu,i)=><div className="gpu-detail" key={i}><strong>{gpu.name}</strong><span>{(gpu.memory_mb/1024).toFixed(1)} GB · {t('驱动 {0}',[gpu.driver])}</span></div>)}
+        {hardware.driver_cuda_max&&<p className="microcopy">{t('驱动支持的 CUDA 上限：{0}',[hardware.driver_cuda_max])}</p>}
+        {hardware.diagnostic&&<p className="engine-error" role="status">{t('GPU 检测信息：{0}',[hardware.diagnostic])}</p>}
         <p className="microcopy">{hardware.cuda_candidate?t('推荐 NVIDIA 方案；安装后还会验证真实 GPU 运算。'):t('当前未满足已配置的 GPU 方案，推荐 CPU。')}</p>
       </>:<p className="muted">{t('正在读取系统与显卡信息…')}</p>}
     </section><div className="engine-grid">{(['vision','face'] as const).map(id=>{

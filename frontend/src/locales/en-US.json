@@ -515,5 +515,7 @@
   "支持 CPU 与 NVIDIA CUDA 12.8；自动方案根据显卡与驱动选择，安装后验证实际计算。": "Supports CPU and NVIDIA CUDA 12.8. Auto selects based on GPU and driver; installation verifies actual computation.",
   "安装后请在设置中选择执行设备：CPU 或 NVIDIA CUDA。": "After installation, choose CPU or NVIDIA CUDA as the execution device in Settings.",
   "模型权重与引擎分开安装；部分电脑需要 Microsoft C++ 构建工具。": "Model weights and engines are installed separately; some computers require Microsoft C++ Build Tools.",
-  "请先在功能中心将人物识别引擎切换为 NVIDIA 方案。": "Switch the face recognition engine to the NVIDIA profile in Feature center first."
+  "请先在功能中心将人物识别引擎切换为 NVIDIA 方案。": "Switch the face recognition engine to the NVIDIA profile in Feature center first.",
+  "驱动支持的 CUDA 上限：{0}": "Driver CUDA compatibility limit: {0}",
+  "GPU 检测信息：{0}": "GPU detection details: {0}"
 }
