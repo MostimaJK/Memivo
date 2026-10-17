@@ -8,7 +8,7 @@ Memivo 是一款在本機執行的桌面影像工作台，整合人物相簿、�
 
 以 **Python + React + TypeScript + Adobe React Spectrum 2** 建構，透過 pywebview 與系統 WebView2 提供桌面介面。照片留在本機處理；AI 引擎與模型權重僅在使用者要求時下載。
 
-**目前版本：v0.3.10 Preview · Windows x64**
+**目前版本：v0.3.11 Preview · Windows x64**
 
 [第一次使用](#first-use) · [環境需求](#requirements) · [功能截圖](#screenshots) · [原始碼啟動](#from-source) · [授權說明](#licensing)
 
@@ -65,7 +65,7 @@ Memivo 是一款在本機執行的桌面影像工作台，整合人物相簿、�
 
 ## 下載與啟動
 
-在另一台 Windows 電腦使用時，建議下載 [Windows 預覽版 ZIP](https://github.com/MostimaJK/Memivo/releases/download/v0.3.10-preview/Memivo-0.3.10-preview-windows-x64.zip)。
+在另一台 Windows 電腦使用時，建議下載 [Windows 預覽版 ZIP](https://github.com/MostimaJK/Memivo/releases/download/v0.3.11-preview/Memivo-0.3.11-preview-windows-x64.zip)。
 
 1. 安裝 **Python 3.12 x64** 與 **Microsoft Edge WebView2 Runtime**。輕量啟動器使用 Windows 10/11 上的 .NET Framework 4.x。
 2. 將**整個 ZIP** 解壓縮至可寫入的資料夾，讓 `Memivo.exe`、`app/` 與 `model/` 維持同一層。
@@ -92,7 +92,7 @@ Memivo 是一款在本機執行的桌面影像工作台，整合人物相簿、�
 
 ## 核心功能截圖
 
-圖庫、偵測與分割使用使用者提供的 Windows 實機截圖（簡體介面）；標註及訓練保留繁體介面的合成資料驗收截圖。圖片展示操作流程，不代表所有照片都能達到相同精度；目前版另有模型預熱控制。
+圖庫、偵測與分割使用使用者提供的 Windows 實機截圖（簡體介面）；標註及訓練保留繁體介面的合成資料驗收截圖。圖片展示操作流程，不代表所有照片都能達到相同精度；目前版另有模型載入控制，以及標題行的緊湊顯存指標。
 
 ### 相片圖庫
 
@@ -207,6 +207,8 @@ Windows 發布壓縮包附有對應專案原始碼 ZIP（包含前端、Python �
 
 偵測與分割工作臺以單一按鈕切換「載入模型」「取消載入」「卸載模型」，旁邊顯示狀態。主動載入完成後保持就緒，不需先匯入圖片；卸載不刪除既有結果。YOLO、SAM3 可分別控制，SAM3 文字與點／框模式需分別載入；訓練等任務會釋放兩者。
 
-NVIDIA CUDA 模式下，各工作區頂部顯示 **GPU 0 顯示卡總顯存**容量條，約每 2 秒更新；包含桌面及其他程式，不是 Memivo 獨占量，也不是 GPU 運算利用率。80% 起提示，95% 起警示；數值來自 nvidia-smi，讀取失敗或過期顯示暫不可用。CPU 模式或沒有 NVIDIA 工具時隱藏。
+NVIDIA CUDA 模式下，各工作區標題同一行顯示 **GPU 0 顯示卡總顯存**容量條，約每 2 秒更新；包含桌面及其他程式，不是 Memivo 獨占量，也不是 GPU 運算利用率。80% 起提示，95% 起警示；數值來自 nvidia-smi，讀取失敗或過期顯示暫不可用。CPU 模式或沒有 NVIDIA 工具時隱藏。
 
 類別篩選以單行顯示名稱與數量；超過 6 個可見目標時預設精簡畫布標籤，懸停／選取查看詳情，亦可切換「完整標籤」。
+
+工作臺採緊湊標題列：移除頁面副標題與重複匯入按鈕，圖片畫布使用剩餘高度。最近執行裝置可點選展開證據；效能、結果目錄及安裝說明按需展開。模型下載指引與錯誤資訊保留。

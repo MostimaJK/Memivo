@@ -26,9 +26,8 @@ export function GpuMemory({enabled}:{enabled:boolean}) {
   const ready=memory?.state==='ready'&&typeof memory.used_mb==='number'&&typeof memory.total_mb==='number'&&typeof memory.percent==='number'&&!!memory.sampled_at&&Date.now()/1000-memory.sampled_at<=6;
   const percent=ready?memory.percent!:0;
   const value=ready?`${(memory.used_mb!/1024).toFixed(1)} / ${(memory.total_mb!/1024).toFixed(1)} GiB · ${percent.toFixed(0)}%`:memory?.state==='loading'||!memory?t('读取中…'):t('暂不可用');
-  return <div className="gpu-memory" aria-live="off" title={`${t('整张显卡的显存占用，包含桌面和其他程序；每约 2 秒刷新，不代表 Memivo 独占。')}${memory?.error?`\n${memory.error}`:''}`}>
+  return <div className="gpu-memory" aria-live="off" title={`${memory?.name?`GPU ${memory.index??0} · ${memory.name}\n`:''}${t('整张显卡的显存占用，包含桌面和其他程序；每约 2 秒刷新，不代表 Memivo 独占。')}${memory?.error?`\n${memory.error}`:''}`}>
     <div className="gpu-memory-header"><span>{t('显卡总显存')}</span><span>{value}</span></div>
-    {memory?.name&&<span className="gpu-memory-device">{`GPU ${memory.index??0} · ${memory.name}`}</span>}
     {ready?<Meter aria-label={t('显卡总显存')} value={percent} valueLabel={`${t('显卡总显存')} ${value}`} size="S" variant={percent>=95?'negative':percent>=80?'notice':'informative'} styles={full}/>:<span className="gpu-memory-unavailable" aria-hidden="true"/>}
   </div>;
 }

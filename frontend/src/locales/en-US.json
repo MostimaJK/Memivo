@@ -664,5 +664,12 @@
   "NVIDIA 显卡": "NVIDIA GPU",
   "显卡总显存": "Total GPU memory",
   "整张显卡的显存占用，包含桌面和其他程序；每约 2 秒刷新，不代表 Memivo 独占。": "Whole GPU memory usage, including the desktop and other apps. Refreshed about every 2 seconds; not Memivo-only usage.",
-  "首次加载较慢；后续复用模型。": "First load is slower; later runs reuse the model."
+  "首次加载较慢；后续复用模型。": "First load is slower; later runs reuse the model.",
+  "性能详情": "Performance details",
+  "硬件与环境": "Hardware and environment",
+  "安装说明": "Installation details",
+  "安装与数据说明": "Installation and data",
+  "模型目录与设置": "Model folder and settings",
+  "训练说明": "Training details",
+  "选择初始模型权重": "Choose initial model weights"
 }
