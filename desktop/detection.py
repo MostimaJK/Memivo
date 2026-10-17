@@ -38,7 +38,7 @@ class YOLOBackend:
         results = self.model.predict(source=image, conf=conf, iou=iou,
                                      device=self.device, verbose=False, save=False)
         result = results[0]
-        from .execution import torch_execution,model_tensor_device
+        from .execution import torch_execution,model_tensor_device,torch_memory_snapshot
         actual=model_tensor_device(getattr(self.model,'predictor',None))
         self.execution=torch_execution('cuda' if self.device=='0' else 'cpu',actual,'detect')
         torch=sys.modules.get('torch')
@@ -49,6 +49,7 @@ class YOLOBackend:
                        if isinstance(value,(float,int)) and math.isfinite(value)})
         if actual is not None and str(actual).startswith('cuda') and torch:
             self.diagnostics['gpu_name']=torch.cuda.get_device_name(actual)
+        self.diagnostics.update(torch_memory_snapshot(actual))
         if result.boxes is None:
             return []
         width, height = image.size

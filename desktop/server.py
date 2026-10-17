@@ -4,21 +4,19 @@ import io
 import json
 import mimetypes
 import secrets
-import threading
 import uuid
-from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit, unquote
 
 from .application import Application, ROOT
+from .image_cache import ImageCache
 
 
 def create_server(application=None, port=0):
     app = application or Application()
     token = secrets.token_urlsafe(32)
-    thumbnails = OrderedDict()
-    cache_lock = threading.Lock()
+    images = ImageCache()
     dist = ROOT / 'frontend/dist'
 
     class Handler(BaseHTTPRequestHandler):
@@ -65,23 +63,17 @@ def create_server(application=None, port=0):
                         from PIL import Image, ImageOps
                         if size == 'download':
                             return self.send_bytes(path.read_bytes(), mimetypes.guess_type(path.name)[0] or 'application/octet-stream')
-                        key = (str(path), path.stat().st_mtime_ns, path.stat().st_size, size)
-                        with cache_lock:
-                            content = thumbnails.get(key)
-                        if content is None:
+                        stat = path.stat()
+                        key = (str(path), stat.st_mtime_ns, stat.st_size, size)
+                        def encode():
                             with Image.open(path) as image:
                                 image = ImageOps.exif_transpose(image)
                                 if size != 'full':
                                     image.thumbnail((440, 330) if size == 'thumb' else (2200, 2200))
                                 buffer = io.BytesIO()
                                 image.convert('RGB').save(buffer, format='JPEG', quality=85)
-                                content = buffer.getvalue()
-                            # Thumbnails only; don't retain dozens of full-size previews.
-                            if size == 'thumb':
-                                with cache_lock:
-                                    thumbnails[key] = content
-                                    while len(thumbnails) > 160:
-                                        thumbnails.popitem(last=False)
+                                return buffer.getvalue()
+                        content = images.get(key, encode)
                         return self.send_bytes(content, 'image/jpeg')
                     return self.json({'error':'未知接口'}, 404)
                 path = (dist / unquote(parsed.path).lstrip('/')).resolve()

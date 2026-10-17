@@ -29,6 +29,26 @@ def torch_execution(requested, device, operation):
     return report
 
 
+def torch_memory_snapshot(device):
+    """Observe an already loaded torch runtime; never initialize CUDA for UI stats.
+
+    Peak counters cover the worker lifetime, rather than resetting global state
+    between operations. These numbers exclude other processes and ORT arenas.
+    """
+    torch = sys.modules.get('torch')
+    if not torch or not str(device).startswith('cuda'):
+        return {}
+    try:
+        functions = dict(allocated_mb='memory_allocated', reserved_mb='memory_reserved',
+                         worker_peak_allocated_mb='max_memory_allocated',
+                         worker_peak_reserved_mb='max_memory_reserved')
+        return {key: round(getattr(torch.cuda, name)(device)/1024**2, 2)
+                for key, name in functions.items() if callable(getattr(torch.cuda, name, None))}
+    except (RuntimeError, ValueError):
+        # Optional diagnostics cannot turn an otherwise successful task into failure.
+        return {}
+
+
 def onnx_profile(path):
     counts={}
     for event in json.loads(Path(path).read_text(encoding='utf-8')):

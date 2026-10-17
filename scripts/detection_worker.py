@@ -71,11 +71,19 @@ class VisionSession:
             self.sam=SAM3Backend();self.sam.model_path=str(path)
             self.sam.device='0' if data['device']=='cuda' else 'cpu';self.sam_key=key
         progress('SAM3 正在复用引擎分割图像…' if reused else 'SAM3 首次加载模型与初始化设备…')
-        if data.get('text','').strip():_,masks=self.sam.process_text_prompt(data['path'],data['text'],data['conf'],data['iou'])
-        else:_,masks=self.sam.process_image(data['path'],data['points'],data['boxes'],data['conf'],data['iou'],labels=data['labels'])
+        started = time.perf_counter()
+        if data.get('text','').strip():_,masks=self.sam.process_text_prompt(data['path'],data['text'],data['conf'],data['iou'],return_image=False)
+        else:_,masks=self.sam.process_image(data['path'],data['points'],data['boxes'],data['conf'],data['iou'],labels=data['labels'],return_image=False)
+        transfer_started = time.perf_counter()
         np.savez_compressed(data['mask_file'],**{f'mask_{i}':mask for i,mask in enumerate(masks)})
         execution=getattr(self.sam,'execution',dict(actual='unknown',evidence='unverified'))
-        return dict(masks=data['mask_file'],execution=execution,performance=dict(device=execution['actual'],gpu_name=execution.get('gpu_name'),model_reused=reused))
+        from desktop.execution import torch_memory_snapshot
+        performance=dict(getattr(self.sam,'diagnostics',{}),device=execution['actual'],
+            gpu_name=execution.get('gpu_name'),model_reused=reused,
+            mask_archive_ms=round((time.perf_counter()-transfer_started)*1000,2),
+            engine_call_ms=round((time.perf_counter()-started)*1000,2),pid=os.getpid())
+        performance.update(torch_memory_snapshot(execution['actual']))
+        return dict(masks=data['mask_file'],execution=execution,performance=performance)
 
     def warmup(self,data,progress=lambda message:None):
         from PIL import Image

@@ -8,7 +8,7 @@ Memivo 是一款在本機執行的桌面影像工作台，整合人物相簿、�
 
 以 **Python + React + TypeScript + Adobe React Spectrum 2** 建構，透過 pywebview 與系統 WebView2 提供桌面介面。照片留在本機處理；AI 引擎與模型權重僅在使用者要求時下載。
 
-**目前版本：v0.3.12 Preview · Windows x64**
+**目前版本：v0.3.13 Preview · Windows x64**
 
 [第一次使用](#first-use) · [環境需求](#requirements) · [功能截圖](#screenshots) · [原始碼啟動](#from-source) · [授權說明](#licensing)
 
@@ -65,7 +65,7 @@ Memivo 是一款在本機執行的桌面影像工作台，整合人物相簿、�
 
 ## 下載與啟動
 
-在另一台 Windows 電腦使用時，建議下載 [Windows 預覽版 ZIP](https://github.com/MostimaJK/Memivo/releases/download/v0.3.12-preview/Memivo-0.3.12-preview-windows-x64.zip)。
+在另一台 Windows 電腦使用時，建議下載 [Windows 預覽版 ZIP](https://github.com/MostimaJK/Memivo/releases/download/v0.3.13-preview/Memivo-0.3.13-preview-windows-x64.zip)。
 
 1. 安裝 **Python 3.12 x64** 與 **Microsoft Edge WebView2 Runtime**。輕量啟動器使用 Windows 10/11 上的 .NET Framework 4.x。
 2. 將**整個 ZIP** 解壓縮至可寫入的資料夾，讓 `Memivo.exe`、`app/` 與 `model/` 維持同一層。
@@ -214,3 +214,5 @@ NVIDIA CUDA 模式下，各工作區標題同一行顯示 **GPU 0 顯示卡總�
 工作臺採緊湊標題列：移除頁面副標題與重複匯入按鈕，圖片畫布使用剩餘高度。最近執行裝置可點選展開證據；效能、結果目錄及安裝說明按需展開。模型下載指引與錯誤資訊保留。
 
 人物相簿空狀態將圖示、說明、登記按鈕與參考照片說明作為整組居中。後續效能規劃與程式碼檢查結果見 [效能與記憶體優化檢查](docs/PERFORMANCE_AUDIT.md)，尚未實作的項目與驗收方法已分開標示。
+
+已完成第一批輸出處理優化：保留全部自動保存檔案與像素內容，減少單目標重複 PNG 編碼、分塊疊色、SAM3 重複解碼與縮放；圖片編碼快取限制為 48 MiB，輪詢避免堆疊。量測範圍、限制與重現方式見 [效能實作與量測](docs/PERFORMANCE_RESULTS.md)。

@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import shutil
 import os
 import sys
 import threading
@@ -578,6 +579,7 @@ class Application:
         if not model or not Path(model).is_file():
             raise ValueError('请先在模型设置中选择 SAM3 权重。')
         def operation():
+            segment_started = time.perf_counter()
             self.runtimes.begin_execution('segment',self.config['device'])
             import numpy as np
             from PIL import Image, ImageOps
@@ -631,39 +633,56 @@ class Application:
             masks = [np.asarray(mask, dtype=bool) for mask in masks if np.any(mask)]
             if not masks:
                 raise ValueError('没有找到分割目标，请调整提示或阈值后重试。')
+            export_started = time.perf_counter()
             combined = np.zeros((height, width), dtype=bool)
             for mask in masks:
                 if mask.shape != (height, width):
                     raise ValueError('分割掩码尺寸与图像不一致。')
-                combined |= mask.astype(bool)
+                combined |= mask
             rgba = original.convert('RGBA')
-            rgba.putalpha(Image.fromarray(combined.astype(np.uint8)*255))
+            combined_alpha = Image.fromarray(combined.astype(np.uint8)*255)
+            rgba.putalpha(combined_alpha)
             run_id = uuid.uuid4().hex
             output_dir = work / run_id
             output_dir.mkdir()
             mask_path = output_dir / 'mask.png'
-            Image.fromarray(combined.astype(np.uint8)*255).save(mask_path)
+            combined_alpha.save(mask_path)
             cutout = output_dir / 'cutout.png'
             rgba.save(cutout)
             crop = output_dir / 'crop.png'
             rgba.crop(rgba.getbbox()).save(crop)
+            del rgba, combined_alpha
             instances = []
             for index, mask in enumerate(masks):
-                item = original.convert('RGBA')
-                item.putalpha(Image.fromarray(mask.astype(np.uint8)*255))
                 item_path = output_dir / f'instance-{index+1}.png'
                 crop_path = output_dir / f'instance-{index+1}-crop.png'
                 item_mask_path = output_dir / f'instance-{index+1}-mask.png'
-                Image.fromarray(mask.astype(np.uint8)*255).save(item_mask_path)
-                bounds = item.getbbox()
-                item.save(item_path)
-                item.crop(bounds).save(crop_path)
+                if len(masks) == 1:
+                    # All three instance outputs equal the combined outputs. Keep
+                    # separate, independently editable files without re-encoding.
+                    shutil.copyfile(mask_path, item_mask_path)
+                    shutil.copyfile(cutout, item_path)
+                    shutil.copyfile(crop, crop_path)
+                    bounds = Image.fromarray(mask).getbbox()
+                else:
+                    alpha = Image.fromarray(mask.astype(np.uint8)*255)
+                    item = original.convert('RGBA')
+                    item.putalpha(alpha)
+                    alpha.save(item_mask_path)
+                    bounds = item.getbbox()
+                    item.save(item_path)
+                    item.crop(bounds).save(crop_path)
+                    del item, alpha
                 instances.append(dict(cutout=self.register(item_path), crop=self.register(crop_path),
                                       mask=self.register(item_mask_path), bbox=list(bounds)))
-            overlay = np.asarray(original).copy()
-            overlay[combined] = (overlay[combined]*.3 + np.array([48,114,235])*.7).astype(np.uint8)
+            from .image_ops import segmentation_overlay
+            overlay = segmentation_overlay(original, combined)
             overlay_path = output_dir / 'overlay.png'
             Image.fromarray(overlay).save(overlay_path)
+            export_ms = (time.perf_counter() - export_started) * 1000
+            self.runtimes.log('Segmentation output performance: ' + json.dumps(dict(
+                export_ms=round(export_ms, 2), total_ms=round((time.perf_counter()-segment_started)*1000, 2),
+                instances=len(masks), png_files=4+3*len(masks), single_instance_reused=len(masks)==1)))
             with self.lock:
                 if self.cancel.is_set():
                     return '分割已停止，原结果保持不变。'

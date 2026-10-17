@@ -86,10 +86,22 @@ function App() {
     const photo = photos.find(p => p.id === selected);
     useEffect(() => { if (!photos.some(p => p.id === selected)) setSelected(photos[0]?.id || ''); }, [state?.config.source]);
     useEffect(()=>{if(pendingDrop.current&&state?.task.state!=='running'){const added=photos.find(p=>!pendingDrop.current!.has(p.id));if(added)setSelected(added.id);pendingDrop.current=null;}},[state]);
-    const refresh = async () => { const next = await api<State>('state'); setState(next); if(isLocale(next.preferences?.language)) setLocale(next.preferences.language); };
+    const refreshRequests = useRef({issued:0, applied:0, pending:0});
+    const refresh = async (poll = false) => {
+        const requests = refreshRequests.current;
+        if(poll && requests.pending) return;
+        const request = ++requests.issued; requests.pending++;
+        try {
+            const next = await api<State>('state');
+            if(request > requests.applied) {
+                requests.applied = request; setState(next);
+                if(isLocale(next.preferences?.language)) setLocale(next.preferences.language);
+            }
+        } finally { requests.pending--; }
+    };
     useEffect(() => { refresh().catch(e => setError(e.message)); }, []);
     useEffect(() => { if (!busy)
-        return; const id = setInterval(() => refresh().catch(e => setError(e.message)), state?.task.kind==='目标检测'?150:900); return () => clearInterval(id); }, [busy,state?.task.kind]);
+        return; const id = setInterval(() => refresh(true).catch(e => setError(e.message)), state?.task.kind==='目标检测'?150:900); return () => clearInterval(id); }, [busy,state?.task.kind]);
     useEffect(() => { setPage(0); }, [filter, person, query]);
     useEffect(()=>{if(state?.task.state==='failed')setError(state.task.error||state.task.message);},[state?.task.state,state?.task.error]);
     useEffect(() => { setMarks([]); markUndo.current=[];markRedo.current=[];drag.current=null;setDraftBox(null); setFaceIndex(0); setIdentity(''); setPrompt(''); setDimensions([photo?.width||1,photo?.height||1]); }, [selected]);

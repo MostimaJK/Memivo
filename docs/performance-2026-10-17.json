@@ -1,0 +1,55 @@
+{
+  "kind": "CPU output and cache microbenchmarks; synthetic image and model double; not GPU inference",
+  "baseline_ref": "6dbcc3093caafbbd85b4549c659fe362080b22fb",
+  "python": "3.12.14",
+  "runs": 5,
+  "export_image": [
+    1600,
+    1000
+  ],
+  "single_mask_export": {
+    "samples_ms": {
+      "baseline": [
+        1034.05,
+        1026.45,
+        963.41,
+        942.94,
+        1235.99
+      ],
+      "optimized": [
+        581.92,
+        651.64,
+        657.55,
+        641.16,
+        678.07
+      ]
+    },
+    "median_ms": {
+      "baseline": 1026.45,
+      "optimized": 651.64
+    },
+    "files": 7,
+    "byte_identical": true
+  },
+  "preview_encoding": {
+    "uncached": {
+      "median_ms": 35.4158,
+      "bytes": 1211537
+    },
+    "cached": {
+      "median_ms": 0.0008,
+      "bytes": 1211537
+    }
+  },
+  "overlay_24mp": {
+    "baseline": {
+      "ms": 1802.93,
+      "python_numpy_peak_mib": 1167.36
+    },
+    "optimized": {
+      "ms": 1616.34,
+      "python_numpy_peak_mib": 103.89
+    }
+  },
+  "overlay_pixel_identical": true
+}
