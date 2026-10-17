@@ -43,6 +43,7 @@ def main():
             icon = Path(__file__).resolve().parent / 'frontend/public/memivo.ico'
             webview.start(gui='edgechromium' if os.name == 'nt' else None, icon=str(icon))
     finally:
+        server.app.runtimes.gpu_memory.close()
         server.app.runtimes.close_detection()
         server.shutdown()
         server.server_close()

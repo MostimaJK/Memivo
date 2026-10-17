@@ -154,6 +154,13 @@ class DesktopTests(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as error:
                 get('/api/state',False)
             self.assertEqual(error.exception.code,403)
+            for route in ('/api/gpu-memory','/api/vision-status'):
+                with self.assertRaises(urllib.error.HTTPError) as denied:get(route,False)
+                self.assertEqual(denied.exception.code,403)
+            with patch.object(self.app.runtimes.gpu_memory,'snapshot',return_value={'state':'unavailable'}) as memory:
+                with get('/api/gpu-memory') as response:self.assertEqual(json.load(response),{'state':'unavailable'})
+                memory.assert_called_once_with(refresh=True)
+            with get('/api/vision-status') as response:self.assertEqual(set(json.load(response)),{'detect','segment'})
             with get('/api/state') as response:
                 data=json.load(response)
             with get('/api/image?id='+data['photos'][0]['id']) as response:

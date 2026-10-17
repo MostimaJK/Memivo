@@ -137,7 +137,7 @@ class Application:
             def run():
                 started = time.perf_counter()
                 try:
-                    if kind in ('目标检测','人物识别','训练模型','评估模型','预热 YOLO','预热 SAM3') and self.sam_backend is not None:
+                    if kind in ('目标检测','人物识别','训练模型','评估模型','加载 YOLO','加载 SAM3') and self.sam_backend is not None:
                         self.sam_backend=None
                         import gc
                         gc.collect()
@@ -173,7 +173,7 @@ class Application:
         if route == 'vision-warmup':
             target=data.get('target')
             mode=data.get('mode','geometry')
-            if target not in ('detect','segment') or mode not in ('geometry','text'):raise ValueError('预热参数无效。')
+            if target not in ('detect','segment') or mode not in ('geometry','text'):raise ValueError('模型加载参数无效。')
             with self.lock:
                 self.require_idle()
                 weights=self.config['yolo' if target=='detect' else 'sam'];device=self.config['device']
@@ -183,15 +183,15 @@ class Application:
                 payload['weights' if target=='detect' else 'model']=weights
                 if self.runtimes.python_for('vision'):self.runtimes.job('vision','warmup',payload,self.cancel.is_set,self.progress)
                 else:self.runtimes.resident_job(sys.executable,'warmup',payload,self.cancel.is_set,self.progress)
-                return '预热完成，模型将保持就绪，直到手动关闭或开始其他 AI 任务。'
-            return self.start_task('预热 YOLO' if target=='detect' else '预热 SAM3',warmup)
+                return '模型已加载就绪。'
+            return self.start_task('加载 YOLO' if target=='detect' else '加载 SAM3',warmup)
         if route == 'vision-release':
             target=data.get('target')
             if target not in ('detect','segment'):raise ValueError('关闭参数无效。')
             def release():
                 self.runtimes.release_vision(target)
                 return '模型已关闭，内存与显存已释放。'
-            return self.start_task('关闭模型',release)
+            return self.start_task('卸载模型',release)
         if route == 'diagnostics-open':
             if os.name != 'nt' or self.window is None:
                 raise ValueError('请在桌面程序中打开日志文件夹。')

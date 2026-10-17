@@ -50,6 +50,10 @@ def create_server(application=None, port=0):
                 if parsed.path.startswith('/api/'):
                     if not self.authorized(query):
                         return self.json({'error':'会话验证失败，请重新启动应用。'}, 403)
+                    if parsed.path == '/api/vision-status':
+                        return self.json(app.runtimes.residents())
+                    if parsed.path == '/api/gpu-memory':
+                        return self.json(app.runtimes.gpu_memory.snapshot(refresh=True))
                     if parsed.path == '/api/state':
                         return self.json(app.snapshot())
                     if parsed.path == '/api/image':

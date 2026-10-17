@@ -112,6 +112,8 @@ class RuntimeManager:
             self.last_log_file = self.last_failure.get('log_file', '')
         except (OSError, ValueError, AttributeError):
             self.last_failure=None
+        from .gpu_memory import GpuMemoryMonitor
+        self.gpu_memory = GpuMemoryMonitor()
         self.hardware = None
         self.records = {}
         self.process = None

@@ -8,7 +8,7 @@ Memivo 是一款在本機執行的桌面影像工作台，整合人物相簿、�
 
 以 **Python + React + TypeScript + Adobe React Spectrum 2** 建構，透過 pywebview 與系統 WebView2 提供桌面介面。照片留在本機處理；AI 引擎與模型權重僅在使用者要求時下載。
 
-**目前版本：v0.3.9 Preview · Windows x64**
+**目前版本：v0.3.10 Preview · Windows x64**
 
 [第一次使用](#first-use) · [環境需求](#requirements) · [功能截圖](#screenshots) · [原始碼啟動](#from-source) · [授權說明](#licensing)
 
@@ -65,7 +65,7 @@ Memivo 是一款在本機執行的桌面影像工作台，整合人物相簿、�
 
 ## 下載與啟動
 
-在另一台 Windows 電腦使用時，建議下載 [Windows 預覽版 ZIP](https://github.com/MostimaJK/Memivo/releases/download/v0.3.9-preview/Memivo-0.3.9-preview-windows-x64.zip)。
+在另一台 Windows 電腦使用時，建議下載 [Windows 預覽版 ZIP](https://github.com/MostimaJK/Memivo/releases/download/v0.3.10-preview/Memivo-0.3.10-preview-windows-x64.zip)。
 
 1. 安裝 **Python 3.12 x64** 與 **Microsoft Edge WebView2 Runtime**。輕量啟動器使用 Windows 10/11 上的 .NET Framework 4.x。
 2. 將**整個 ZIP** 解壓縮至可寫入的資料夾，讓 `Memivo.exe`、`app/` 與 `model/` 維持同一層。
@@ -203,8 +203,10 @@ Windows 發布壓縮包附有對應專案原始碼 ZIP（包含前端、Python �
 
 第三方套件、字型與模型依各自條款辦理。Ultralytics 提供 AGPL／Enterprise 路徑；GPLv3 與 AGPLv3 組合時須遵守適用的 AGPL 網路互動義務。LVFace／InsightFace 部分官方權重僅供非商業研究，SAM3 使用獨立條款。自有程式採 GPL 不代表所有模型都可商用；引擎另行安裝或子程序隔離也不自動豁免授權義務。詳見 [第三方資訊](THIRD_PARTY_NOTICES.md)。原始碼倉庫與 Windows ZIP 均不重新散布模型權重。
 
-### 主動預熱與釋放模型
+### 模型載入與顯存監控
 
-偵測及分割工作臺右側提供「預熱模型」「關閉並釋放」，不需要先匯入圖片。預熱會載入所選權重並完成一次測試推論，成功後顯示實際裝置並保持就緒；預熱中可以取消。YOLO 與 SAM3 可分別控制，同時保持會增加記憶體／顯存用量。SAM3 文字與點／框模式分開預熱，切換模式後需重新預熱。一般自動快取仍在閒置 5 分鐘後釋放；手動預熱不受此限制。訓練、評估、人臉識別及退出程式會釋放兩者。關閉模型不會刪除已有偵測結果或分割檔案。
+偵測與分割工作臺以單一按鈕切換「載入模型」「取消載入」「卸載模型」，旁邊顯示狀態。主動載入完成後保持就緒，不需先匯入圖片；卸載不刪除既有結果。YOLO、SAM3 可分別控制，SAM3 文字與點／框模式需分別載入；訓練等任務會釋放兩者。
+
+NVIDIA CUDA 模式下，各工作區頂部顯示 **GPU 0 顯示卡總顯存**容量條，約每 2 秒更新；包含桌面及其他程式，不是 Memivo 獨占量，也不是 GPU 運算利用率。80% 起提示，95% 起警示；數值來自 nvidia-smi，讀取失敗或過期顯示暫不可用。CPU 模式或沒有 NVIDIA 工具時隱藏。
 
 類別篩選以單行顯示名稱與數量；超過 6 個可見目標時預設精簡畫布標籤，懸停／選取查看詳情，亦可切換「完整標籤」。
