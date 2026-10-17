@@ -8,7 +8,7 @@ Memivo 是一款在本機執行的桌面影像工作台，整合人物相簿、�
 
 以 **Python + React + TypeScript + Adobe React Spectrum 2** 建構，透過 pywebview 與系統 WebView2 提供桌面介面。照片留在本機處理；AI 引擎與模型權重僅在使用者要求時下載。
 
-**目前版本：v0.3.8 Preview · Windows x64**
+**目前版本：v0.3.9 Preview · Windows x64**
 
 [第一次使用](#first-use) · [環境需求](#requirements) · [功能截圖](#screenshots) · [原始碼啟動](#from-source) · [授權說明](#licensing)
 
@@ -25,9 +25,9 @@ Memivo 是一款在本機執行的桌面影像工作台，整合人物相簿、�
 
 人物相簿匯出採複製方式，原圖保留。人物識別需要可用且符合條款的權重與人工檢閱；不承諾任意角度或遮擋的人像都能正確歸檔。
 
-![Memivo 繁體標註與資料集工作臺](docs/images/annotation.png)
+![Memivo 桌面端 SAM3 分割與遮罩預覽](docs/images/segmentation-desktop.png)
 
-*實際介面，使用程式產生的合成圖與人工確認輪廓；不是人物辨識或 SAM3 精度展示。*
+*使用者提供的 Windows 實機操作截圖；照片分割、遮罩預覽與匯出入口。截圖取自加入預熱控制之前的介面。*
 
 <a id="first-use"></a>
 
@@ -65,7 +65,7 @@ Memivo 是一款在本機執行的桌面影像工作台，整合人物相簿、�
 
 ## 下載與啟動
 
-在另一台 Windows 電腦使用時，建議下載 [Windows 預覽版 ZIP](https://github.com/MostimaJK/Memivo/releases/download/v0.3.8-preview/Memivo-0.3.8-preview-windows-x64.zip)。
+在另一台 Windows 電腦使用時，建議下載 [Windows 預覽版 ZIP](https://github.com/MostimaJK/Memivo/releases/download/v0.3.9-preview/Memivo-0.3.9-preview-windows-x64.zip)。
 
 1. 安裝 **Python 3.12 x64** 與 **Microsoft Edge WebView2 Runtime**。輕量啟動器使用 Windows 10/11 上的 .NET Framework 4.x。
 2. 將**整個 ZIP** 解壓縮至可寫入的資料夾，讓 `Memivo.exe`、`app/` 與 `model/` 維持同一層。
@@ -92,17 +92,29 @@ Memivo 是一款在本機執行的桌面影像工作台，整合人物相簿、�
 
 ## 核心功能截圖
 
-以下為繁體中文介面的實際截圖，僅使用合成幾何圖與 CPU 驗收紀錄；不含私人合照。指標用來確認操作流程，不代表真實相簿辨識品質。
+圖庫、偵測與分割使用使用者提供的 Windows 實機截圖（簡體介面）；標註及訓練保留繁體介面的合成資料驗收截圖。圖片展示操作流程，不代表所有照片都能達到相同精度；目前版另有模型預熱控制。
 
 ### 相片圖庫
 
 匯入、瀏覽與選取照片，讓後續整理或處理有一致的入口。
 
-![相片圖庫：合成示例資料](docs/images/library.png)
+![相片圖庫：匯入、選取與照片詳情](docs/images/library-desktop.jpg)
+
+### 偵測與計數
+
+在圖片上確認 YOLO 偵測框、類別及數量；可將選取的目標送入 SAM3。
+
+![YOLO 偵測與計數：三個人物目標](docs/images/detection-desktop.png)
+
+### 分割與去背
+
+頁首實機截圖展示框選提示、彩色遮罩、黑白遮罩／透明圖切換及結果匯出入口。
 
 ### 標註與資料集
 
-人工確認標籤，管理場景劃分與固定資料版本。頁首截圖展示此工作臺；AI 候選仍需人工審核。
+人工確認標籤，管理場景劃分與固定資料版本；AI 候選仍需人工審核。
+
+![標註與資料集：合成圖與人工確認輪廓](docs/images/annotation.png)
 
 ### 訓練工作臺
 
@@ -125,7 +137,7 @@ model/
 
 官方目錄提供 YOLO11／YOLO26 偵測與分割的 n/s/m/l/x 規格、LVFace T/S/B/L、InsightFace 模型套件與 SAM3 官方存取入口。
 
-某項用途尚未設定且只有一個候選時，程式會自動選取；已有的有效選擇會保留，多個候選則使用下拉選單。掃描不會將所有模型載入記憶體，實際相容性會在執行時檢查。詳見 [模型目錄說明](model/README.md)。
+某項用途尚未設定且只有一個候選時，程式會自動選取；已有的有效選擇會保留，多個候選則使用下拉選單。掃描不會將所有模型載入記憶體，實際相容性會在執行時檢查。詳見 [模型目錄說明](model/README.md)。人物識別第一次下載請看 [InsightFace 檔案對照與下載指南](docs/INSIGHTFACE_MODELS.md)，逐一說明壓縮包內哪些檔案需要使用。
 
 <a id="from-source"></a>
 
@@ -190,3 +202,9 @@ GPL 允許商業使用、修改與再散布，也允許收費。散布受 GPL �
 Windows 發布壓縮包附有對應專案原始碼 ZIP（包含前端、Python 後端、C# 啟動器及建構腳本）；建構方式見包內 SOURCE.txt 與本文件。進一步說明見 [GPL 與第三方授權](docs/LICENSING_OPTIONS.md)。
 
 第三方套件、字型與模型依各自條款辦理。Ultralytics 提供 AGPL／Enterprise 路徑；GPLv3 與 AGPLv3 組合時須遵守適用的 AGPL 網路互動義務。LVFace／InsightFace 部分官方權重僅供非商業研究，SAM3 使用獨立條款。自有程式採 GPL 不代表所有模型都可商用；引擎另行安裝或子程序隔離也不自動豁免授權義務。詳見 [第三方資訊](THIRD_PARTY_NOTICES.md)。原始碼倉庫與 Windows ZIP 均不重新散布模型權重。
+
+### 主動預熱與釋放模型
+
+偵測及分割工作臺右側提供「預熱模型」「關閉並釋放」，不需要先匯入圖片。預熱會載入所選權重並完成一次測試推論，成功後顯示實際裝置並保持就緒；預熱中可以取消。YOLO 與 SAM3 可分別控制，同時保持會增加記憶體／顯存用量。SAM3 文字與點／框模式分開預熱，切換模式後需重新預熱。一般自動快取仍在閒置 5 分鐘後釋放；手動預熱不受此限制。訓練、評估、人臉識別及退出程式會釋放兩者。關閉模型不會刪除已有偵測結果或分割檔案。
+
+類別篩選以單行顯示名稱與數量；超過 6 個可見目標時預設精簡畫布標籤，懸停／選取查看詳情，亦可切換「完整標籤」。

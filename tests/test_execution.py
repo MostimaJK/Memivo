@@ -55,6 +55,10 @@ class ExecutionTests(unittest.TestCase):
             weights.write_bytes(b'changed')
             self.assertFalse(session.run('segment',data)['performance']['model_reused']);self.assertEqual(len(calls),2)
             with np.load(data['mask_file'],allow_pickle=False) as masks:self.assertEqual(masks['mask_0'].shape,(3,4))
+            result=session.warmup(dict(target='segment',model=str(weights),device='cpu',mode='geometry'))
+            self.assertEqual(result['warmed'],'segment')
+            self.assertNotIn('masks',result)
+            self.assertEqual(result['performance']['device'],'cpu')
 
     def test_sam_text_threshold_changes_reuse_model_and_image_features(self):
         calls=[]

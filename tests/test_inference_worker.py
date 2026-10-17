@@ -54,7 +54,7 @@ for line in sys.stdin:
         self.patcher=patch('desktop.runtimes.ROOT',self.root);self.patcher.start()
 
     def tearDown(self):
-        self.worker.close();self.patcher.stop();self.temp.cleanup()
+        self.manager.close_detection();self.patcher.stop();self.temp.cleanup()
 
     def request(self,payload=None,cancelled=lambda:False,timeout=5):
         return self.worker.request(sys.executable,payload or {},cancelled,lambda *a:None,timeout)
@@ -66,6 +66,37 @@ for line in sys.stdin:
         self.assertIsNotNone(process.poll())
         self.assertNotEqual(self.request()['performance']['pid'],first)
         self.assertFalse(list(self.manager.root.glob('detect-*')))
+
+    def test_manual_warmup_is_pinned_and_two_models_release_independently(self):
+        weights=self.root/'model.pt';weights.touch()
+        detect=dict(target='detect',weights=str(weights),device='cpu',mode='geometry')
+        self.manager.resident_job(sys.executable,'warmup',detect,lambda:False,lambda *a:None)
+        first=self.worker.process;self.worker.idle_seconds=.05
+        time.sleep(1.2)
+        self.assertIsNone(first.poll())
+        self.assertTrue(self.manager.residents()['detect']['pinned'])
+        segment=dict(target='segment',model=str(weights),device='cpu',mode='geometry')
+        self.manager.resident_job(sys.executable,'warmup',segment,lambda:False,lambda *a:None)
+        second=self.manager.segmentation_worker.process
+        self.assertIsNone(first.poll());self.assertIsNone(second.poll())
+        self.manager.release_vision('segment')
+        self.assertIsNotNone(second.poll());self.assertIsNone(first.poll())
+        self.assertEqual(self.manager.residents()['segment']['state'],'stopped')
+        weights.write_bytes(b'updated')
+        self.assertEqual(self.manager.residents()['detect']['state'],'stale')
+        self.manager.close_detection();self.assertIsNotNone(first.poll())
+
+    def test_automatic_cache_is_released_for_other_model_and_warmup_cancel_clears_pin(self):
+        weights=self.root/'model.pt';weights.touch()
+        self.manager.resident_job(sys.executable,'detect',dict(weights=str(weights),device='cpu'),lambda:False,lambda *a:None)
+        process=self.worker.process
+        self.manager.resident_job(sys.executable,'segment',dict(model=str(weights),device='cpu'),lambda:False,lambda *a:None)
+        self.assertIsNotNone(process.poll())
+        start=time.monotonic()
+        with self.assertRaisesRegex(RuntimeError,'cancelled'):
+            self.manager.resident_job(sys.executable,'warmup',dict(target='detect',weights=str(weights),device='cpu',delay=5),lambda:time.monotonic()-start>.2,lambda *a:None)
+        self.assertEqual(self.worker.snapshot()['state'],'stopped')
+        self.assertFalse(self.worker.snapshot()['pinned'])
 
     def test_cancellation_and_timeout_kill_the_worker_without_stale_results(self):
         self.request();process=self.worker.process;start=time.monotonic()

@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import time
 import traceback
+import tempfile
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
@@ -61,7 +62,7 @@ class VisionSession:
         import numpy as np
         from sam_backend import SAM3Backend
         path=Path(data['model']).resolve();stat=path.stat()
-        key=(str(path),stat.st_mtime_ns,stat.st_size,data['device'])
+        key=(str(path),stat.st_mtime_ns,stat.st_size,data['device'],'text' if data.get('text','').strip() else 'geometry')
         reused=self.sam is not None and self.sam_key==key
         if not reused:
             self.sam=None;gc.collect()
@@ -76,6 +77,22 @@ class VisionSession:
         execution=getattr(self.sam,'execution',dict(actual='unknown',evidence='unverified'))
         return dict(masks=data['mask_file'],execution=execution,performance=dict(device=execution['actual'],gpu_name=execution.get('gpu_name'),model_reused=reused))
 
+    def warmup(self,data,progress=lambda message:None):
+        from PIL import Image
+        with tempfile.TemporaryDirectory(prefix='memivo-warmup-') as folder:
+            path=Path(folder)/'warmup.png';Image.new('RGB',(640,640),'#808080').save(path)
+            target=data['target']
+            payload=dict(data,path=str(path),conf=.25,iou=.7)
+            if target=='segment':payload.update(text='object' if data.get('mode')=='text' else '',points=[[320,320]],labels=[1],boxes=[],mask_file=str(Path(folder)/'masks.npz'))
+            result=self.run(target,payload,progress)
+            performance=result['performance']
+            torch=sys.modules.get('torch')
+            if torch and performance.get('device','').startswith('cuda'):
+                performance['allocated_mb']=round(torch.cuda.memory_allocated(torch.device(performance['device']))/1024**2,1)
+            # Warmup never creates user detections or segmentation exports.
+            return dict(performance=performance,warmed=target)
+
+
 
 def main():
     from album.core import save_json
@@ -87,7 +104,9 @@ def main():
         try:
             message=json.loads(line)
             request=json.loads(Path(message['request']).read_text(encoding='utf-8'))
-            result=session.run(request.get('action','detect'),request['payload'],lambda text:send(dict(id=message['id'],progress=text)))
+            action=request.get('action','detect')
+            callback=lambda text:send(dict(id=message['id'],progress=text))
+            result=session.warmup(request['payload'],callback) if action=='warmup' else session.run(action,request['payload'],callback)
             save_json(request['result'],result)
             send(dict(id=message['id'],ok=True))
         except Exception:

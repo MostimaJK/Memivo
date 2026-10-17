@@ -17,3 +17,7 @@
 源码使用项目根 `model/`；EXE 使用 `Memivo.exe` 旁的 `model/`，请将整个发布目录放在可写位置。高级用户可在源码启动时使用 `MEMIVO_MODEL_ROOT` 指定目录。模型不随引擎卸载删除，不随发布包分发。
 
 目录来源核对：2026-10-17。条款以官方为准：[YOLO11](https://docs.ultralytics.com/models/yolo11/)、[YOLO26](https://docs.ultralytics.com/models/yolo26/)、[LVFace](https://github.com/bytedance/LVFace)、[InsightFace](https://github.com/deepinsight/insightface/tree/master/model_zoo)、[SAM3](https://huggingface.co/facebook/sam3)。
+
+## InsightFace 下载与解压指引
+
+第一次推荐 buffalo_l.zip，仅需要 det_10g.onnx（放 face/detector）与 w600k_r50.onnx（放 face/recognition）。完整包通常包含 5 个 ONNX；另外三个为 106 点二维关键点、68 点三维关键点、年龄／性别估计，当前流程不需要。若已使用 LVFace，只需取检测文件。各规格文件名、官方 ZIP 链接、目录示例和备用入口请看 [详细指南](../docs/INSIGHTFACE_MODELS.md)。功能中心也会随所选规格展示对应文件。

@@ -7,7 +7,7 @@ export function ExecutionStatus({state}:{state:State|null}) {
   const execution=state.runtimes.execution;
   const actual=execution?.actual||'unknown';
   const label=actual.startsWith('cuda')?'GPU · CUDA':actual==='cpu'?'CPU':actual==='cache'?t('特征缓存'):execution?.evidence==='failed'?t('执行失败，未确认设备'):t('尚未验证');
-  const operations:Record<string,string>={detect:'YOLO 检测',segment:'SAM3 分割',recognize:'人物识别',train:'模型训练',evaluate:'模型评估'};
+  const operations:Record<string,string>={warmup_detect:'预热 YOLO',warmup_segment:'预热 SAM3',detect:'YOLO 检测',segment:'SAM3 分割',recognize:'人物识别',train:'模型训练',evaluate:'模型评估'};
   return <section className="execution-status" aria-label={t('执行设备状态')} role="status">
     <span>{t('全局设置')}：{state.config.device==='cuda'?'GPU · CUDA':'CPU'}</span>
     <strong className={actual.startsWith('cuda')?'verified-gpu':''}>{t('最近实际执行')}：{label}</strong>

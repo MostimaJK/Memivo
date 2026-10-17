@@ -119,6 +119,7 @@ class DesktopTests(unittest.TestCase):
         self.app.action('config',{'sam':str(self.ref)})
         photo = self.app.photos[0]
         with patch.dict('sys.modules',{'sam_backend':SimpleNamespace(SAM3Backend=FakeSAM)}):
+            self.app.sam_factory=FakeSAM
             self.app.action('segment',{'id':photo['id'],'points':[[25,20]],'labels':[0],
                                        'boxes':[[10,5,80,70]],'text':''})
             self.wait()

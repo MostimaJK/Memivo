@@ -119,6 +119,7 @@ class VisionTests(unittest.TestCase):
                 b = np.zeros_like(a); b[40:60,30:50]=1
                 return None, [a,b]
         with patch.dict('sys.modules', {'sam_backend':SimpleNamespace(SAM3Backend=FakeSAM)}):
+            self.app.sam_factory=FakeSAM
             self.app.action('segment', {'id': self.photo, 'points': [[15,10]], 'labels':[1]})
             self.wait()
         self.assertEqual(len(self.app.segment['instances']),2)
@@ -158,6 +159,7 @@ class VisionTests(unittest.TestCase):
             def __init__(self): self.model_path = None
             def process_image(self,*args,**kwargs): return None, []
         with patch.dict('sys.modules', {'sam_backend': SimpleNamespace(SAM3Backend=EmptySAM)}):
+            self.app.sam_factory=EmptySAM
             self.app.action('segment', {'id':self.photo, 'points':[[1,1]], 'labels':[1]})
             self.app.worker.join(5)
         self.assertEqual(self.app.task['state'],'failed')

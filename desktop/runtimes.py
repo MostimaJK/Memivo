@@ -106,6 +106,7 @@ class RuntimeManager:
         self.last_failure = None
         self.execution = None
         self.detection_worker = None
+        self.segmentation_worker = None
         try:
             self.last_failure = json.loads((self.log_root/'last-failure.json').read_text(encoding='utf-8'))
             self.last_log_file = self.last_failure.get('log_file', '')
@@ -146,7 +147,7 @@ class RuntimeManager:
             return dict(hardware=self.hardware, engines=[dict(id=feature, **self.records.get(feature, {'state':'missing'}),
                        available=self.python_for(feature) is not None) for feature in FEATURES],
                        logs=list(self.logs), last_feature=self.last_feature, root=str(self.root),
-                       log_root=str(self.log_root), log_file=self.last_log_file, last_failure=self.last_failure,execution=self.execution)
+                       log_root=str(self.log_root), log_file=self.last_log_file, last_failure=self.last_failure,execution=self.execution,residents=self.residents())
 
     def log(self, line):
         with self.lock:
@@ -347,15 +348,41 @@ class RuntimeManager:
             self.log('已卸载引擎，模型与项目数据保留。')
         return '已卸载引擎，模型与项目数据保留。'
 
+    def residents(self):
+        result={}
+        for kind,worker in [('detect',self.detection_worker),('segment',self.segmentation_worker)]:
+            status=worker.snapshot() if worker else dict(state='stopped',pinned=False)
+            if status.get('state')=='ready':
+                try:
+                    stat=Path(status['weights']).stat()
+                    if stat.st_mtime_ns!=status.get('mtime_ns') or stat.st_size!=status.get('bytes'):status['state']='stale'
+                except (KeyError,OSError):status['state']='stale'
+            result[kind]=status
+        return result
+
+    def release_vision(self, target=None):
+        if target not in (None,'detect','segment'):raise ValueError('Unknown vision model.')
+        for kind,worker in [('detect',self.detection_worker),('segment',self.segmentation_worker)]:
+            if worker and (target is None or target==kind):worker.close()
+
     def close_detection(self):
-        if self.detection_worker is not None:self.detection_worker.close()
+        self.release_vision()
+
+    def resident_job(self, python, action, payload, cancelled, progress):
+        from .inference_worker import DetectionWorker
+        kind=payload.get('target') if action=='warmup' else action
+        if kind not in ('detect','segment'):raise ValueError('Unknown vision model.')
+        other=self.segmentation_worker if kind=='detect' else self.detection_worker
+        if other and not other.snapshot().get('pinned'):other.close()
+        attribute='detection_worker' if kind=='detect' else 'segmentation_worker'
+        worker=getattr(self,attribute)
+        if worker is None:worker=DetectionWorker(self);setattr(self,attribute,worker)
+        self.last_feature='vision'
+        self.begin_execution('warmup_'+kind if action=='warmup' else action,payload['device'])
+        return worker.request(python,payload,cancelled,progress,action=action)
 
     def detect_job(self, python, payload, cancelled, progress):
-        from .inference_worker import DetectionWorker
-        self.last_feature='vision'
-        self.begin_execution('detect',payload['device'])
-        if self.detection_worker is None:self.detection_worker=DetectionWorker(self)
-        return self.detection_worker.request(python,payload,cancelled,progress)
+        return self.resident_job(python,'detect',payload,cancelled,progress)
 
     def job(self, feature, action, payload, cancelled, progress):
         python = self.python_for(feature)
@@ -366,16 +393,12 @@ class RuntimeManager:
             self.logs.clear()
             self.last_log_file=''
         device=payload.get('device',payload.get('config',{}).get('device',payload.get('options',{}).get('device','cpu')))
-        if action in ('segment','recognize','train','evaluate'):self.begin_execution(action,device)
+        if action in ('segment','recognize','train','evaluate','warmup'):self.begin_execution('warmup_'+payload.get('target','unknown') if action=='warmup' else action,device)
         self.log(f'Engine: {feature}; action: {action}; device: {device}; profile: {self.records.get(feature,{}).get("profile")}')
         if device == 'cuda' and self.records.get(feature,{}).get('profile') != 'cu128':
             raise ValueError('当前引擎为 CPU 版，但执行设备设为 NVIDIA CUDA。请安装 NVIDIA 引擎，或在设置中改用 CPU。')
-        if action=='detect':
-            return self.detect_job(python,payload,cancelled,progress)
-        if action=='segment':
-            from .inference_worker import DetectionWorker
-            if self.detection_worker is None:self.detection_worker=DetectionWorker(self)
-            return self.detection_worker.request(python,payload,cancelled,progress,action='segment')
+        if action in ('detect','segment','warmup'):
+            return self.resident_job(python,action,payload,cancelled,progress)
         # Release cached YOLO VRAM before SAM3, training, evaluation or face jobs.
         self.close_detection()
         with tempfile.TemporaryDirectory(prefix='job-',dir=self.root) as folder:

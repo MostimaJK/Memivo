@@ -359,7 +359,12 @@
       "relative": "face/",
       "page": "https://github.com/deepinsight/insightface/tree/master/model_zoo",
       "license": "Non-commercial research",
-      "mode": "official"
+      "mode": "official",
+      "archive": "https://github.com/deepinsight/insightface/releases/download/model-zoo/buffalo_l.zip",
+      "release_page": "https://github.com/deepinsight/insightface/releases/tag/model-zoo",
+      "detector_file": "det_10g.onnx",
+      "recognition_file": "w600k_r50.onnx",
+      "has_extra_models": true
     },
     {
       "id": "buffalo_m",
@@ -371,7 +376,12 @@
       "relative": "face/",
       "page": "https://github.com/deepinsight/insightface/tree/master/model_zoo",
       "license": "Non-commercial research",
-      "mode": "official"
+      "mode": "official",
+      "archive": "https://github.com/deepinsight/insightface/releases/download/model-zoo/buffalo_m.zip",
+      "release_page": "https://github.com/deepinsight/insightface/releases/tag/model-zoo",
+      "detector_file": "det_2.5g.onnx",
+      "recognition_file": "w600k_r50.onnx",
+      "has_extra_models": true
     },
     {
       "id": "buffalo_s",
@@ -383,7 +393,12 @@
       "relative": "face/",
       "page": "https://github.com/deepinsight/insightface/tree/master/model_zoo",
       "license": "Non-commercial research",
-      "mode": "official"
+      "mode": "official",
+      "archive": "https://github.com/deepinsight/insightface/releases/download/model-zoo/buffalo_s.zip",
+      "release_page": "https://github.com/deepinsight/insightface/releases/tag/model-zoo",
+      "detector_file": "det_500m.onnx",
+      "recognition_file": "w600k_mbf.onnx",
+      "has_extra_models": true
     },
     {
       "id": "buffalo_sc",
@@ -395,7 +410,12 @@
       "relative": "face/",
       "page": "https://github.com/deepinsight/insightface/tree/master/model_zoo",
       "license": "Non-commercial research",
-      "mode": "official"
+      "mode": "official",
+      "archive": "https://github.com/deepinsight/insightface/releases/download/model-zoo/buffalo_sc.zip",
+      "release_page": "https://github.com/deepinsight/insightface/releases/tag/model-zoo",
+      "detector_file": "det_500m.onnx",
+      "recognition_file": "w600k_mbf.onnx",
+      "has_extra_models": false
     },
     {
       "id": "antelopev2",
@@ -407,7 +427,12 @@
       "relative": "face/",
       "page": "https://github.com/deepinsight/insightface/tree/master/model_zoo",
       "license": "Non-commercial research",
-      "mode": "official"
+      "mode": "official",
+      "archive": "https://github.com/deepinsight/insightface/releases/download/model-zoo/antelopev2.zip",
+      "release_page": "https://github.com/deepinsight/insightface/releases/tag/model-zoo",
+      "detector_file": "scrfd_10g_bnkps.onnx",
+      "recognition_file": "glintr100.onnx",
+      "has_extra_models": true
     },
     {
       "id": "sam3",

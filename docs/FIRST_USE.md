@@ -79,3 +79,7 @@ AI 候選需要人工確認；沒有標註不等於負樣本。同一場景或�
 | 原始碼啟動要求 Node.js | 原始碼需要建構前端；Release ZIP 已內附建構結果，因此不需要 Node.js |
 
 其他環境細節見 [桌面說明](SPECTRUM_DESKTOP.md) 與 [可選引擎](OPTIONAL_ENGINES.md)。
+
+## InsightFace 初次配置
+
+需要人物整理时，先看 [InsightFace 下载与文件说明](INSIGHTFACE_MODELS.md)，按表格取出检测及识别两个 ONNX 文件，扫描后在设置中确认；不要把关键点或年龄性别模型当作识别模型。

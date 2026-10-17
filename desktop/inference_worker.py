@@ -22,12 +22,23 @@ class DetectionWorker:
         self.responses=queue.Queue()
         self.last_used=0
         self.interpreter=None
+        self.status={'state':'stopped','pinned':False}
         atexit.register(self.close)
 
-    def close(self):
+    def snapshot(self):
+        # Do not take the request lock: UI polling must stay responsive during warmup.
+        status=dict(self.status)
+        process=self.process
+        if status.get('state')=='ready' and (process is None or process.poll() is not None):
+            status.update(state='stopped',pinned=False)
+        return status
+
+    def close(self, reason='stopped'):
         with self.lock:
             process=self.process
-            if process is None:return
+            if process is None:
+                self.status={'state':reason,'pinned':False};return
+            self.status=dict(self.status,state='stopping',pinned=False)
             self.process=None
             if process.poll() is None:
                 self.manager.terminate(process)
@@ -36,6 +47,7 @@ class DetectionWorker:
             if self.reader:self.reader.join(3)
             for pipe in (process.stdin,process.stdout):
                 if pipe:pipe.close()
+            self.status={'state':reason,'pinned':False}
 
     def expire(self, process):
         while process.poll() is None:
@@ -43,7 +55,7 @@ class DetectionWorker:
             # A live request holds the same lock, so it cannot expire mid-inference.
             with self.lock:
                 if self.process is not process:return
-                if time.monotonic()-self.last_used>=self.idle_seconds:
+                if not self.status.get('pinned') and time.monotonic()-self.last_used>=self.idle_seconds:
                     self.close();return
 
     def start(self, python):
@@ -76,6 +88,12 @@ class DetectionWorker:
                 if cancelled():raise RuntimeError('Operation cancelled.')
                 self.start(python)
                 process=self.process
+                target=payload.get('target',action)
+                weights=str(Path(payload.get('weights') or payload.get('model')).resolve()) if payload.get('weights') or payload.get('model') else ''
+                mode=payload.get('mode','geometry') if action=='warmup' else ('text' if payload.get('text','').strip() else 'geometry')
+                previous=self.status
+                pinned=action=='warmup' or (previous.get('pinned') and previous.get('kind')==target and previous.get('weights')==weights and previous.get('requested')==payload.get('device') and (target!='segment' or previous.get('mode')==mode))
+                self.status=dict(state='loading',kind=target,weights=weights,requested=payload.get('device'),mode=mode,pinned=pinned)
                 with tempfile.TemporaryDirectory(prefix='detect-',dir=self.manager.root) as folder:
                     job=uuid.uuid4().hex
                     request=Path(folder)/'request.json';result=Path(folder)/'result.json'
@@ -97,11 +115,13 @@ class DetectionWorker:
                         data=json.loads(result.read_text(encoding='utf-8'))
                         data['performance']['worker_roundtrip_ms']=round((time.perf_counter()-start)*1000,2)
                         performance=data['performance']
-                        self.manager.record_execution(dict(operation=action,requested=payload.get('device','unknown'),actual=performance.get('device','unknown'),evidence='tensor_device' if performance.get('device','unknown')!='unknown' else 'unverified',gpu_name=performance.get('gpu_name'),model_reused=performance.get('model_reused')))
+                        stat=Path(weights).stat() if weights else None
+                        self.status=dict(self.status,state='ready',actual=performance.get('device','unknown'),gpu_name=performance.get('gpu_name'),allocated_mb=performance.get('allocated_mb'),mtime_ns=stat.st_mtime_ns if stat else None,bytes=stat.st_size if stat else None)
+                        self.manager.record_execution(dict(operation='warmup_'+target if action=='warmup' else action,requested=payload.get('device','unknown'),actual=performance.get('device','unknown'),evidence='tensor_device' if performance.get('device','unknown')!='unknown' else 'unverified',gpu_name=performance.get('gpu_name'),model_reused=performance.get('model_reused')))
                         self.manager.log('Vision performance: '+json.dumps(data['performance'],ensure_ascii=False))
                         return data
             except Exception:
                 # A failed/cancelled model is discarded; retry starts a clean worker.
-                self.close()
+                self.close(reason='stopped' if cancelled() else 'failed')
                 raise
             finally:self.last_used=time.monotonic()

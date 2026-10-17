@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class Application:
-    def __init__(self, home=None, backend_factory=None, detection_factory=None):
+    def __init__(self, home=None, backend_factory=None, detection_factory=None, sam_factory=None):
         self.home = Path(home or os.environ.get('MEMIVO_HOME') or ROOT / '.segmentflow')
         self.home.mkdir(parents=True, exist_ok=True)
         from .runtimes import RuntimeManager
@@ -31,6 +31,7 @@ class Application:
         self.window = None
         self.backend_factory = backend_factory
         self.detection_factory = detection_factory
+        self.sam_factory = sam_factory
         self.detection = None
         self.cancel = threading.Event()
         self.worker = None
@@ -136,7 +137,7 @@ class Application:
             def run():
                 started = time.perf_counter()
                 try:
-                    if kind in ('目标检测','人物识别','训练模型','评估模型') and self.sam_backend is not None:
+                    if kind in ('目标检测','人物识别','训练模型','评估模型','预热 YOLO','预热 SAM3') and self.sam_backend is not None:
                         self.sam_backend=None
                         import gc
                         gc.collect()
@@ -169,6 +170,28 @@ class Application:
             self.task.update(done=done, total=total, message=message)
 
     def action(self, route, data):
+        if route == 'vision-warmup':
+            target=data.get('target')
+            mode=data.get('mode','geometry')
+            if target not in ('detect','segment') or mode not in ('geometry','text'):raise ValueError('预热参数无效。')
+            with self.lock:
+                self.require_idle()
+                weights=self.config['yolo' if target=='detect' else 'sam'];device=self.config['device']
+            if not weights or not Path(weights).is_file() or Path(weights).suffix.lower()!='.pt':raise ValueError('请先选择有效的本地模型权重。')
+            def warmup():
+                payload=dict(target=target,mode=mode,device=device)
+                payload['weights' if target=='detect' else 'model']=weights
+                if self.runtimes.python_for('vision'):self.runtimes.job('vision','warmup',payload,self.cancel.is_set,self.progress)
+                else:self.runtimes.resident_job(sys.executable,'warmup',payload,self.cancel.is_set,self.progress)
+                return '预热完成，模型将保持就绪，直到手动关闭或开始其他 AI 任务。'
+            return self.start_task('预热 YOLO' if target=='detect' else '预热 SAM3',warmup)
+        if route == 'vision-release':
+            target=data.get('target')
+            if target not in ('detect','segment'):raise ValueError('关闭参数无效。')
+            def release():
+                self.runtimes.release_vision(target)
+                return '模型已关闭，内存与显存已释放。'
+            return self.start_task('关闭模型',release)
         if route == 'diagnostics-open':
             if os.name != 'nt' or self.window is None:
                 raise ValueError('请在桌面程序中打开日志文件夹。')
@@ -587,30 +610,22 @@ class Application:
                 raise ValueError('请添加点、框选或文本提示。')
             if self.sam_input_key!=source_key or not normalized.exists():
                 original.save(normalized);self.sam_input_key=source_key
-            if self.runtimes.python_for('vision'):
+            if not self.sam_factory:
                 self.sam_backend = None
                 mask_file = work / f'masks-{uuid.uuid4().hex}.npz'
                 try:
-                    segment_result=self.runtimes.job('vision','segment',dict(path=str(normalized),model=model,
-                        device=self.config['device'],conf=confidence,iou=iou,text=data.get('text',''),
-                        points=points,labels=labels,boxes=boxes,mask_file=str(mask_file)),self.cancel.is_set,self.progress)
-                    with np.load(mask_file,allow_pickle=False) as output:
-                        masks = [output[key] for key in output.files]
-                finally:
-                    mask_file.unlink(missing_ok=True)
+                    payload=dict(path=str(normalized),model=model,device=self.config['device'],conf=confidence,iou=iou,text=data.get('text',''),points=points,labels=labels,boxes=boxes,mask_file=str(mask_file))
+                    if self.runtimes.python_for('vision'):self.runtimes.job('vision','segment',payload,self.cancel.is_set,self.progress)
+                    else:self.runtimes.resident_job(sys.executable,'segment',payload,self.cancel.is_set,self.progress)
+                    with np.load(mask_file,allow_pickle=False) as output:masks = [output[key] for key in output.files]
+                finally:mask_file.unlink(missing_ok=True)
             else:
-                from sam_backend import SAM3Backend
-                if self.sam_backend is None or self.sam_backend.model_path != model or getattr(self.sam_backend,'device','cpu')!=('0' if self.config['device']=='cuda' else 'cpu'):
-                    self.sam_backend = SAM3Backend()
-                    self.sam_backend.model_path = model
+                if self.sam_backend is None or self.sam_backend.model_path!=model or getattr(self.sam_backend,'device','cpu')!=('0' if self.config['device']=='cuda' else 'cpu'):
+                    self.sam_backend = self.sam_factory();self.sam_backend.model_path = model
                 self.sam_backend.device = '0' if self.config['device'] == 'cuda' else 'cpu'
-            if not self.runtimes.python_for('vision') and data.get('text', '').strip():
-                image, masks = self.sam_backend.process_text_prompt(str(normalized), data['text'], confidence, iou)
-            elif not self.runtimes.python_for('vision'):
-                if not points and not boxes:
-                    raise ValueError('请添加点、框选或文本提示。')
-                image, masks = self.sam_backend.process_image(str(normalized), points, boxes, confidence, iou, labels=labels)
-            if not self.runtimes.python_for('vision') and getattr(self.sam_backend,'execution',None):self.runtimes.record_execution(self.sam_backend.execution)
+                if data.get('text','').strip():_,masks=self.sam_backend.process_text_prompt(str(normalized),data['text'],confidence,iou)
+                else:_,masks=self.sam_backend.process_image(str(normalized),points,boxes,confidence,iou,labels=labels)
+                if getattr(self.sam_backend,'execution',None):self.runtimes.record_execution(self.sam_backend.execution)
             if self.cancel.is_set():
                 return '分割已停止，原结果保持不变。'
             masks = [np.asarray(mask, dtype=bool) for mask in masks if np.any(mask)]
