@@ -103,6 +103,7 @@ class RuntimeManager:
         self.log_root.mkdir(exist_ok=True)
         self.last_log_file = ''
         self.last_failure = None
+        self.detection_worker = None
         try:
             self.last_failure = json.loads((self.log_root/'last-failure.json').read_text(encoding='utf-8'))
             self.last_log_file = self.last_failure.get('log_file', '')
@@ -312,6 +313,7 @@ class RuntimeManager:
             raise
 
     def uninstall(self, feature):
+        self.close_detection()
         target = self.directory(feature)
         if not target.exists():
             return '引擎未安装。'
@@ -327,6 +329,15 @@ class RuntimeManager:
             self.log('已卸载引擎，模型与项目数据保留。')
         return '已卸载引擎，模型与项目数据保留。'
 
+    def close_detection(self):
+        if self.detection_worker is not None:self.detection_worker.close()
+
+    def detect_job(self, python, payload, cancelled, progress):
+        from .inference_worker import DetectionWorker
+        self.last_feature='vision'
+        if self.detection_worker is None:self.detection_worker=DetectionWorker(self)
+        return self.detection_worker.request(python,payload,cancelled,progress)
+
     def job(self, feature, action, payload, cancelled, progress):
         python = self.python_for(feature)
         if python is None:
@@ -339,6 +350,10 @@ class RuntimeManager:
         self.log(f'Engine: {feature}; action: {action}; device: {device}; profile: {self.records.get(feature,{}).get("profile")}')
         if device == 'cuda' and self.records.get(feature,{}).get('profile') != 'cu128':
             raise ValueError('当前引擎为 CPU 版，但执行设备设为 NVIDIA CUDA。请安装 NVIDIA 引擎，或在设置中改用 CPU。')
+        if action=='detect':
+            return self.detect_job(python,payload,cancelled,progress)
+        # Release cached YOLO VRAM before SAM3, training, evaluation or face jobs.
+        self.close_detection()
         with tempfile.TemporaryDirectory(prefix='job-',dir=self.root) as folder:
             request, result = Path(folder)/'request.json', Path(folder)/'result.json'
             save_json(request,dict(action=action,payload=payload,result=str(result)))

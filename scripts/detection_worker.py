@@ -1,0 +1,66 @@
+"""Private JSON-lines worker. The owning UI closes stdin / terminates it at shutdown."""
+import gc
+import json
+import os
+from pathlib import Path
+import sys
+import time
+import traceback
+
+ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT))
+
+
+class DetectorSession:
+    def __init__(self, factory=None):
+        self.factory=factory
+        self.backend=None
+        self.key=None
+
+    def detect(self, data, progress=lambda message:None):
+        from PIL import Image,ImageOps
+        from desktop.detection import YOLOBackend
+        started=time.perf_counter()
+        path=Path(data['weights']).resolve();stat=path.stat()
+        key=(str(path),stat.st_mtime_ns,stat.st_size,data['device'])
+        reused=self.backend is not None and self.key==key
+        load_started=time.perf_counter()
+        if not reused:
+            self.backend=None;self.key=None;gc.collect()
+            torch=sys.modules.get('torch')
+            if torch and torch.cuda.is_available():torch.cuda.empty_cache()
+            progress('YOLO 首次加载模型与初始化设备…')
+            self.backend=(self.factory or YOLOBackend)(str(path),data['device']);self.key=key
+        else:progress('YOLO 正在复用模型检测图像…')
+        load_ms=(time.perf_counter()-load_started)*1000
+        decode_started=time.perf_counter()
+        with Image.open(data['path']) as image:original=ImageOps.exif_transpose(image).convert('RGB')
+        decode_ms=(time.perf_counter()-decode_started)*1000
+        predict_started=time.perf_counter()
+        detections=self.backend.predict(original,data['conf'],data['iou'])
+        performance=dict(getattr(self.backend,'diagnostics',{}),model_reused=reused,pid=os.getpid(),
+            model_load_ms=round(load_ms,2),image_decode_ms=round(decode_ms,2),
+            predict_ms=round((time.perf_counter()-predict_started)*1000,2),
+            engine_total_ms=round((time.perf_counter()-started)*1000,2))
+        return dict(detections=detections,width=original.width,height=original.height,performance=performance)
+
+
+def main():
+    from album.core import save_json
+    session=DetectorSession()
+    def send(value):print('MEMIVO_DETECTION:'+json.dumps(value,ensure_ascii=False),flush=True)
+    # Parent death closes the pipe; there is no network listener or global service.
+    for line in sys.stdin:
+        message={}
+        try:
+            message=json.loads(line)
+            request=json.loads(Path(message['request']).read_text(encoding='utf-8'))
+            result=session.detect(request['payload'],lambda text:send(dict(id=message['id'],progress=text)))
+            save_json(request['result'],result)
+            send(dict(id=message['id'],ok=True))
+        except Exception:
+            send(dict(id=message.get('id'),error=traceback.format_exc()))
+            return
+
+
+if __name__=='__main__':main()

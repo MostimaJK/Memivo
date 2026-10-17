@@ -6,7 +6,7 @@ import subprocess
 import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
-VERSION='0.3.6-preview'
+VERSION='0.3.7-preview'
 
 
 def main():
@@ -17,7 +17,7 @@ def main():
     for folder in ('album','desktop'):
         shutil.copytree(ROOT/folder,app/folder,ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
     (app/'scripts').mkdir()
-    for file in ('runtime_worker.py','launch_release.py'):
+    for file in ('runtime_worker.py','detection_worker.py','launch_release.py'):
         shutil.copy2(ROOT/'scripts'/file,app/'scripts'/file)
     for file in ('spectrum_app.py','sam_backend.py','requirements-spectrum.txt'):
         shutil.copy2(ROOT/file,app/file)

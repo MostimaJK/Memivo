@@ -569,5 +569,18 @@
   "关闭": "Close",
   "拖入图片，或从图库选择。": "Drop images here, or choose from the library.",
   "拖入图片会追加到当前图库；路径导入会打开独立项目。": "Dropped images are added to this library; importing a path opens a separate project.",
-  "浏览器中可拖入图片或填写本机路径。": "In the browser, drop images or enter a local path."
+  "浏览器中可拖入图片或填写本机路径。": "In the browser, drop images or enter a local path.",
+  "检测性能": "Detection performance",
+  "本次处理 {0} ms": "Processing: {0} ms",
+  "模型已复用": "Model reused",
+  "首次加载模型": "First model load",
+  "加载模型": "Load model",
+  "读取图片": "Read image",
+  "检测处理": "Detection pipeline",
+  "其中模型推理": "Model inference only",
+  "首次包含模型加载与设备初始化；后续检测复用模型。空闲 5 分钟或运行其他 AI 任务时释放。": "First run includes model loading and device initialization. Later runs reuse the model; it is released after 5 idle minutes or before another AI task.",
+  "主界面环境依赖": "UI environment dependencies",
+  "下方仅检测主界面环境；独立 AI 引擎的安装状态请查看功能中心。": "These checks cover the UI environment only. See Feature center for independent AI engine status.",
+  "YOLO 首次加载模型与初始化设备…": "YOLO: loading the model and initializing the device…",
+  "YOLO 正在复用模型检测图像…": "YOLO: detecting with the cached model…"
 }

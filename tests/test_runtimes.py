@@ -22,6 +22,7 @@ class RuntimeTests(unittest.TestCase):
         self.manager.hardware=dict(recommended='cpu',cuda_candidate=False)
 
     def tearDown(self):
+        self.manager.close_detection()
         self.temp.cleanup()
 
     def fake_commands(self,commands,fail_at=None):
@@ -181,10 +182,10 @@ class RuntimeTests(unittest.TestCase):
         def run(command,cancelled,progress=None,timeout=3600):
             self.assertEqual(command[0],python)
             request=json.loads(Path(command[-1]).read_text(encoding='utf-8'))
-            self.assertEqual(request['action'],'detect')
+            self.assertEqual(request['action'],'mask-polygons')
             Path(request['result']).write_text(json.dumps({'detections':[]}),encoding='utf-8')
         with patch.object(self.manager,'run',side_effect=run):
-            self.assertEqual(self.manager.job('vision','detect',{'path':'中文.png'},lambda:False,lambda *a:None),{'detections':[]})
+            self.assertEqual(self.manager.job('vision','mask-polygons',{'path':'中文.png'},lambda:False,lambda *a:None),{'detections':[]})
         self.assertFalse(list(self.manager.root.glob('job-*')))
 
     def test_no_nvidia_recommends_cpu(self):
@@ -250,6 +251,15 @@ class YOLO:
                 device='cpu',conf=.25,iou=.7),lambda:False,lambda *a:None)
         self.assertEqual(result['detections'][0]['name'],'test-only')
         self.assertEqual(result['detections'][0]['bbox'],[1.,2.,10.,20.])
+        self.assertFalse(result['performance']['model_reused'])
+        second=self.manager.job('vision','detect',dict(path=str(image),weights=str(weights),
+                device='cpu',conf=.4,iou=.7),lambda:False,lambda *a:None)
+        self.assertTrue(second['performance']['model_reused'])
+        self.assertEqual(result['performance']['pid'],second['performance']['pid'])
+        weights.write_bytes(b'updated weights')
+        third=self.manager.job('vision','detect',dict(path=str(image),weights=str(weights),
+                device='cpu',conf=.4,iou=.7),lambda:False,lambda *a:None)
+        self.assertFalse(third['performance']['model_reused'])
 
     def test_environment_action_runs_without_changing_project(self):
         app=Application(self.root/'app');before=dict(app.config)

@@ -22,7 +22,8 @@ export async function uploadImages(files:File[]):Promise<UploadedImages> {
 }
 export type Face = {bbox:number[]; identity:string|null; status:string; candidates:{name:string;score:number}[]};
 export type Photo = {id:string;name:string;path:string;faces:Face[];error:string|null;processed:boolean;width?:number;height?:number};
-export type Detection = {photo:string;source:string;model:string;conf:number;iou:number;width:number;height:number;detections:{class_id:number;name:string;confidence:number;bbox:number[]}[];counts:{class_id:number;name:string;count:number}[];total:number};
+export type DetectionPerformance={device:string;gpu_name?:string;torch_version?:string;cuda_version?:string|null;model_reused:boolean;model_load_ms:number;image_decode_ms:number;predict_ms:number;worker_roundtrip_ms?:number;total_ms:number;stages_ms?:Record<string,number>};
+export type Detection = {performance?:DetectionPerformance;photo:string;source:string;model:string;conf:number;iou:number;width:number;height:number;detections:{class_id:number;name:string;confidence:number;bbox:number[]}[];counts:{class_id:number;name:string;count:number}[];total:number};
 export type Segment = {photo:string;count:number;width:number;height:number;directory:string;mask:string;cutout:string;crop:string;overlay:string;instances:{cutout:string;crop:string;mask:string;bbox:number[]}[]};
 export type Annotation = {id:string;class_id:number;type:'box'|'polygon';bbox?:number[];points?:number[][];source?:string};
 export type DatasetImage = {id:string;file_id:string;name:string;width:number;height:number;group:string;split:string;reviewed:boolean;negative:boolean;annotations:Annotation[];revision:number};

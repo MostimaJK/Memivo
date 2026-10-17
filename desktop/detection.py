@@ -1,6 +1,7 @@
 """Local YOLO adapter. Downloads are explicit and separate in the model library."""
 from collections import Counter
 import math
+import sys
 from pathlib import Path
 
 
@@ -37,6 +38,15 @@ class YOLOBackend:
         results = self.model.predict(source=image, conf=conf, iou=iou,
                                      device=self.device, verbose=False, save=False)
         result = results[0]
+        actual=getattr(getattr(self.model,'predictor',None),'device',None)
+        torch=sys.modules.get('torch')
+        self.diagnostics=dict(device=str(actual) if actual is not None else 'unknown',
+            torch_version=str(getattr(torch,'__version__','unknown')),
+            cuda_version=getattr(getattr(torch,'version',None),'cuda',None),
+            stages_ms={key:round(float(value),2) for key,value in (getattr(result,'speed',None) or {}).items()
+                       if isinstance(value,(float,int)) and math.isfinite(value)})
+        if actual is not None and str(actual).startswith('cuda') and torch:
+            self.diagnostics['gpu_name']=torch.cuda.get_device_name(actual)
         if result.boxes is None:
             return []
         width, height = image.size

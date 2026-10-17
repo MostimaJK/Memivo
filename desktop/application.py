@@ -4,6 +4,7 @@ import copy
 import importlib.util
 import json
 import os
+import sys
 import threading
 import time
 import uuid
@@ -134,6 +135,8 @@ class Application:
             def run():
                 started = time.perf_counter()
                 try:
+                    if kind in ('SAM3 分割','人物识别','训练模型','评估模型','转换 SAM3 标注'):
+                        self.runtimes.close_detection()
                     message = operation()
                     with self.lock:
                         stopped = self.cancel.is_set()
@@ -427,7 +430,7 @@ class Application:
         return self.start_task('人物识别', operation)
 
     def detect_image(self, data):
-        from .detection import YOLOBackend, validate_options, summarize
+        from .detection import validate_options, summarize
         conf, iou = validate_options(data)
         with self.lock:
             self.require_idle()
@@ -438,19 +441,23 @@ class Application:
         if not weights or not Path(weights).is_file() or Path(weights).suffix.lower() != '.pt':
             raise ValueError('请选择已有的本地 YOLO .pt 权重。')
         def operation():
-            from PIL import Image, ImageOps
+            started=time.perf_counter()
             self.progress(0, 0, 'YOLO 正在检测图像…')
-            with Image.open(path) as source:
-                original = ImageOps.exif_transpose(source).convert('RGB')
+            payload=dict(path=str(path),weights=weights,device=device,conf=conf,iou=iou)
             if not self.detection_factory and self.runtimes.python_for('vision'):
-                detections = self.runtimes.job('vision','detect',dict(path=str(path),weights=weights,
-                    device=device,conf=conf,iou=iou),self.cancel.is_set,self.progress)['detections']
+                prediction=self.runtimes.job('vision','detect',payload,self.cancel.is_set,self.progress)
+            elif self.detection_factory:
+                from scripts.detection_worker import DetectorSession
+                session=DetectorSession(self.detection_factory)
+                prediction=session.detect(payload,lambda message:self.progress(0,0,message))
             else:
-                backend = (self.detection_factory or YOLOBackend)(weights, device)
-                detections = backend.predict(original, conf, iou)
+                prediction=self.runtimes.detect_job(sys.executable,payload,self.cancel.is_set,self.progress)
+            detections=prediction['detections']
+            performance=prediction['performance']
+            performance['total_ms']=round((time.perf_counter()-started)*1000,2)
             result = dict(photo=data['id'], source=str(path), model=str(Path(weights).resolve()),
-                          conf=conf, iou=iou, width=original.width, height=original.height,
-                          detections=detections, counts=summarize(detections), total=len(detections))
+                          conf=conf, iou=iou, width=prediction['width'], height=prediction['height'],
+                          performance=performance,detections=detections, counts=summarize(detections), total=len(detections))
             with self.lock:
                 if self.cancel.is_set():
                     return '检测已停止，原结果保持不变。'
