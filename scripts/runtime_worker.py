@@ -10,6 +10,11 @@ sys.path.insert(0,str(ROOT))
 def main():
     request=json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
     data=request['payload']
+    def execution(report):print('MEMIVO_EXECUTION:'+json.dumps(report,ensure_ascii=False),flush=True)
+    def observe(owner,operation,requested):
+        from desktop.execution import torch_execution,model_tensor_device
+        device=model_tensor_device(owner)
+        report=torch_execution(requested,device,operation);execution(report);return report
     def progress(*values):
         print('MEMIVO_PROGRESS:'+json.dumps(values,ensure_ascii=False),flush=True)
     if request['action']=='detect':
@@ -30,12 +35,16 @@ def main():
             _,masks=backend.process_image(data['path'],data['points'],data['boxes'],data['conf'],data['iou'],labels=data['labels'])
         # Numeric masks only; no object arrays/pickle cross the process boundary.
         np.savez_compressed(data['mask_file'],**{f'mask_{i}':mask for i,mask in enumerate(masks)})
-        result={'masks':data['mask_file']}
+        result={'masks':data['mask_file'],'execution':getattr(backend,'execution',None)}
+        if result['execution']:execution(result['execution'])
     elif request['action']=='recognize':
         from album.backend import FaceBackend
         from album.service import run_project
         config=data['config']
-        result=run_project(config,FaceBackend(config['detector'],config['recognition'],config['device']),progress)
+        backend=FaceBackend(config['detector'],config['recognition'],config['device'])
+        backend.on_execution=execution
+        result=run_project(config,backend,progress)
+        result['execution']=backend.execution_report();execution(result['execution'])
     elif request['action']=='mask-polygons':
         import cv2
         import numpy as np
@@ -68,6 +77,7 @@ def main():
             save_json(output/'metrics.json',history)
             progress(metrics['epoch'],trainer.epochs,'正在训练模型…')
         model.add_callback('on_fit_epoch_end',on_epoch)
+        model.add_callback('on_train_start',lambda trainer:observe(trainer,'train',data['options']['device']))
         options=data['options'];device='0' if options['device']=='cuda' else 'cpu'
         if data['resume']:
             model.train(resume=True,device=device,workers=0)
@@ -78,6 +88,7 @@ def main():
     elif request['action']=='evaluate':
         from ultralytics import YOLO
         model=YOLO(data['weights']);options=data['options'];device='0' if options['device']=='cuda' else 'cpu'
+        model.add_callback('on_val_start',lambda validator:observe(validator,'evaluate',options['device']))
         metrics=model.val(data=data['data'],split='test',imgsz=options['imgsz'],batch=options['batch'],device=device,
                           workers=0,plots=False,project=data['output'],name='test',exist_ok=True)
         summary={key:float(value) for key,value in metrics.results_dict.items()}

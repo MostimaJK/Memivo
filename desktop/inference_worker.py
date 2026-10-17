@@ -69,7 +69,7 @@ class DetectionWorker:
         self.last_used=time.monotonic()
         threading.Thread(target=self.expire,args=(process,),daemon=True).start()
 
-    def request(self, python, payload, cancelled, progress, timeout=300):
+    def request(self, python, payload, cancelled, progress, timeout=300,action='detect'):
         with self.lock:
             start=time.perf_counter()
             try:
@@ -79,7 +79,7 @@ class DetectionWorker:
                 with tempfile.TemporaryDirectory(prefix='detect-',dir=self.manager.root) as folder:
                     job=uuid.uuid4().hex
                     request=Path(folder)/'request.json';result=Path(folder)/'result.json'
-                    save_json(request,dict(payload=payload,result=str(result)))
+                    save_json(request,dict(action=action,payload=payload,result=str(result)))
                     process.stdin.write(json.dumps(dict(id=job,request=str(request)),ensure_ascii=False)+'\n')
                     process.stdin.flush()
                     while True:
@@ -96,7 +96,9 @@ class DetectionWorker:
                             raise RuntimeError(message['error']+'\nRecent engine output:\n'+detail)
                         data=json.loads(result.read_text(encoding='utf-8'))
                         data['performance']['worker_roundtrip_ms']=round((time.perf_counter()-start)*1000,2)
-                        self.manager.log('YOLO performance: '+json.dumps(data['performance'],ensure_ascii=False))
+                        performance=data['performance']
+                        self.manager.record_execution(dict(operation=action,requested=payload.get('device','unknown'),actual=performance.get('device','unknown'),evidence='tensor_device' if performance.get('device','unknown')!='unknown' else 'unverified',gpu_name=performance.get('gpu_name'),model_reused=performance.get('model_reused')))
+                        self.manager.log('Vision performance: '+json.dumps(data['performance'],ensure_ascii=False))
                         return data
             except Exception:
                 # A failed/cancelled model is discarded; retry starts a clean worker.

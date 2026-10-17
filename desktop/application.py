@@ -41,6 +41,7 @@ class Application:
         self.undo_stack = []
         self.segment = None
         self.sam_backend = None
+        self.sam_input_key = None
         self.config = dict(source='', workspace=str(self.home / 'project'), detector='',
                            recognition='', sam='', yolo='', device='cpu', threshold=.55, margin=.08, references={})
         self.preferences = {'language': 'zh-CN'}
@@ -135,7 +136,13 @@ class Application:
             def run():
                 started = time.perf_counter()
                 try:
-                    if kind in ('SAM3 分割','人物识别','训练模型','评估模型','转换 SAM3 标注'):
+                    if kind in ('目标检测','人物识别','训练模型','评估模型') and self.sam_backend is not None:
+                        self.sam_backend=None
+                        import gc
+                        gc.collect()
+                        torch=sys.modules.get('torch')
+                        if torch and torch.cuda.is_available():torch.cuda.empty_cache()
+                    if kind in ('人物识别','训练模型','评估模型','转换 SAM3 标注'):
                         self.runtimes.close_detection()
                     message = operation()
                     with self.lock:
@@ -409,6 +416,7 @@ class Application:
             raise ValueError('请在模型设置中选择 SCRFD 和识别模型的本地权重。')
         def operation():
             from album.service import run_project
+            self.runtimes.begin_execution('recognize',config['device'])
             managed = self.runtimes.python_for('face') if not self.backend_factory else None
             if managed:
                 if config['device'] == 'cuda' and self.runtimes.records.get('face', {}).get('profile') != 'cu128':
@@ -420,7 +428,10 @@ class Application:
                 from album.backend import FaceBackend
                 backend = FaceBackend(config['detector'], config['recognition'], config['device'])
             if not managed:
+                if hasattr(backend,'on_execution'):backend.on_execution=self.runtimes.record_execution
                 report = run_project(config, backend, self.progress, self.cancel.is_set)
+                if hasattr(backend,'execution_report'):
+                    report['execution']=backend.execution_report();self.runtimes.record_execution(report['execution'])
             with self.lock:
                 self.report = report
                 self.photos = [self.view_photo(p) for p in report['photos']]
@@ -544,6 +555,7 @@ class Application:
         if not model or not Path(model).is_file():
             raise ValueError('请先在模型设置中选择 SAM3 权重。')
         def operation():
+            self.runtimes.begin_execution('segment',self.config['device'])
             import numpy as np
             from PIL import Image, ImageOps
             with Image.open(path) as image:
@@ -562,8 +574,10 @@ class Application:
                     raise ValueError('框选范围无效。')
             work = self.home / 'segments'
             work.mkdir(exist_ok=True)
-            normalized = work / 'input.png'
-            original.save(normalized)
+            import hashlib
+            stat=path.stat()
+            source_key=hashlib.sha256(f'{path.resolve()}:{stat.st_mtime_ns}:{stat.st_size}'.encode()).hexdigest()[:24]
+            normalized = work/'input.png'
             self.progress(0, 0, 'SAM3 正在分割图像…')
             confidence = float(data.get('conf', .3))
             iou = float(data.get('iou', .7))
@@ -571,11 +585,13 @@ class Application:
                 raise ValueError('分割阈值必须介于 0 与 1 之间。')
             if not data.get('text','').strip() and not points and not boxes:
                 raise ValueError('请添加点、框选或文本提示。')
+            if self.sam_input_key!=source_key or not normalized.exists():
+                original.save(normalized);self.sam_input_key=source_key
             if self.runtimes.python_for('vision'):
                 self.sam_backend = None
                 mask_file = work / f'masks-{uuid.uuid4().hex}.npz'
                 try:
-                    self.runtimes.job('vision','segment',dict(path=str(normalized),model=model,
+                    segment_result=self.runtimes.job('vision','segment',dict(path=str(normalized),model=model,
                         device=self.config['device'],conf=confidence,iou=iou,text=data.get('text',''),
                         points=points,labels=labels,boxes=boxes,mask_file=str(mask_file)),self.cancel.is_set,self.progress)
                     with np.load(mask_file,allow_pickle=False) as output:
@@ -584,7 +600,7 @@ class Application:
                     mask_file.unlink(missing_ok=True)
             else:
                 from sam_backend import SAM3Backend
-                if self.sam_backend is None or self.sam_backend.model_path != model:
+                if self.sam_backend is None or self.sam_backend.model_path != model or getattr(self.sam_backend,'device','cpu')!=('0' if self.config['device']=='cuda' else 'cpu'):
                     self.sam_backend = SAM3Backend()
                     self.sam_backend.model_path = model
                 self.sam_backend.device = '0' if self.config['device'] == 'cuda' else 'cpu'
@@ -594,6 +610,7 @@ class Application:
                 if not points and not boxes:
                     raise ValueError('请添加点、框选或文本提示。')
                 image, masks = self.sam_backend.process_image(str(normalized), points, boxes, confidence, iou, labels=labels)
+            if not self.runtimes.python_for('vision') and getattr(self.sam_backend,'execution',None):self.runtimes.record_execution(self.sam_backend.execution)
             if self.cancel.is_set():
                 return '分割已停止，原结果保持不变。'
             masks = [np.asarray(mask, dtype=bool) for mask in masks if np.any(mask)]

@@ -2,6 +2,9 @@ from ultralytics import SAM
 from ultralytics.models.sam import SAM3SemanticPredictor
 import numpy as np
 import cv2
+import gc
+from pathlib import Path
+from desktop.execution import torch_execution,model_tensor_device
 
 
 class SAM3Backend:
@@ -11,6 +14,8 @@ class SAM3Backend:
         self.device = 'cpu'
         self.semantic_predictor = None
         self.semantic_key = None
+        self.semantic_image_key = None
+        self.model_key=None
 
     def set_model_path(self, path):
         self.model_path = path
@@ -18,6 +23,8 @@ class SAM3Backend:
         self.semantic_key = None
         try:
             self.model = SAM(path)
+            stat=Path(path).stat()
+            self.model_key=(str(Path(path).resolve()),stat.st_mtime_ns,stat.st_size,self.device)
             print(f"SAM 模型載入成功: {path}")
             return True
         except Exception as e:
@@ -29,6 +36,11 @@ class SAM3Backend:
         if self.semantic_predictor is not None:
             self.semantic_predictor = None
             self.semantic_key = None
+            gc.collect()
+        stat=Path(self.model_path).stat()
+        key=(str(Path(self.model_path).resolve()),stat.st_mtime_ns,stat.st_size,self.device)
+        if self.model is not None and self.model_key!=key:
+            self.model=None;gc.collect()
         if not self.model:
             if self.model_path:
                 if not self.set_model_path(self.model_path):
@@ -61,6 +73,7 @@ class SAM3Backend:
 
         # 執行預測
         results = self.model.predict(**predict_kwargs)
+        self.execution=torch_execution('cuda' if self.device=='0' else 'cpu',model_tensor_device(self.model.predictor),'segment')
         result = results[0]
 
         masks = []
@@ -75,7 +88,8 @@ class SAM3Backend:
 
     def process_text_prompt(self, image_path, text_prompt, conf=0.3, iou=0.7):
         """處理基於文本提示的影像分割"""
-        self.model = None
+        if self.model is not None:
+            self.model = None;self.model_key=None;gc.collect()
         overrides = {
             "conf": conf,
             "iou": iou,
@@ -84,18 +98,28 @@ class SAM3Backend:
         }
 
         # 建立專門處理語義預測的 Predictor
-        key = (self.model_path, conf, iou, self.device)
+        stat=Path(self.model_path).stat()
+        key = (self.model_path, self.device,stat.st_mtime_ns,stat.st_size)
         if self.semantic_predictor is None or self.semantic_key != key:
+            self.semantic_predictor=None;gc.collect()
             self.semantic_predictor = SAM3SemanticPredictor(overrides=overrides)
             self.semantic_key = key
+            self.semantic_image_key=None
         predictor = self.semantic_predictor
-        predictor.set_image(image_path)
+        predictor.args.conf=conf;predictor.args.iou=iou
+        stat=Path(image_path).stat()
+        image_key=(str(Path(image_path).resolve()),stat.st_mtime_ns,stat.st_size)
+        if self.semantic_image_key!=image_key:
+            predictor.set_image(image_path)
+            self.semantic_image_key=image_key
 
         # 進行預測
         results = predictor(text=[text_prompt])
+        self.execution=torch_execution('cuda' if self.device=='0' else 'cpu',model_tensor_device(predictor),'segment')
         result = results[0]
 
         img = cv2.imread(image_path)
+        if img is None:raise ValueError('无法读取输入图像。')
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         masks = []

@@ -7,6 +7,7 @@ export function diagnosticText(state:State|null) {
     if(!state)return '';
     const runtime=state.runtimes;
     return ['Memivo diagnostics',`Device setting: ${state.config.device}`,
+        runtime.execution?`Actual execution evidence: ${JSON.stringify(runtime.execution)}`:'Actual execution: not verified',
         ...runtime.engines.map(e=>`Engine ${e.id}: ${e.state}; profile=${e.profile||'unknown'}`),
         `Task: ${state.task.kind}; state=${state.task.state}`,
         state.task.error||'',`Log file: ${state.task.log_file||runtime.log_file||''}`,

@@ -582,5 +582,22 @@
   "主界面环境依赖": "UI environment dependencies",
   "下方仅检测主界面环境；独立 AI 引擎的安装状态请查看功能中心。": "These checks cover the UI environment only. See Feature center for independent AI engine status.",
   "YOLO 首次加载模型与初始化设备…": "YOLO: loading the model and initializing the device…",
-  "YOLO 正在复用模型检测图像…": "YOLO: detecting with the cached model…"
+  "YOLO 正在复用模型检测图像…": "YOLO: detecting with the cached model…",
+  "执行设备状态": "Execution device status",
+  "特征缓存": "Feature cache",
+  "尚未验证": "Not verified",
+  "全局设置": "Global setting",
+  "最近实际执行": "Latest actual execution",
+  "该任务请求": "Task requested",
+  "已核对 ONNX 算子执行记录": "ONNX node placement verified",
+  "含 CPU 算子": "includes CPU nodes",
+  "已核对模型张量设备": "Model tensor device verified",
+  "等待执行证据，设置不代表实际设备。": "Awaiting execution evidence; preferences are not proof.",
+  "新训练默认跟随全局设备，可单独更改；恢复训练沿用原记录的设备和参数。": "New training defaults to the global device, with a separate override. Resume retains the original run device and parameters.",
+  "YOLO 检测": "YOLO detection",
+  "模型训练": "Model training",
+  "模型评估": "Model evaluation",
+  "SAM3 首次加载模型与初始化设备…": "SAM3: loading model and initializing device…",
+  "SAM3 正在复用引擎分割图像…": "SAM3: segmenting with the cached engine…",
+  "执行失败，未确认设备": "Failed; device not confirmed"
 }

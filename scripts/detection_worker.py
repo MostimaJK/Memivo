@@ -45,9 +45,41 @@ class DetectorSession:
         return dict(detections=detections,width=original.width,height=original.height,performance=performance)
 
 
+class VisionSession:
+    def __init__(self):
+        self.detector=DetectorSession();self.sam=None;self.sam_key=None;self.active=None
+
+    def run(self,action,data,progress=lambda message:None):
+        if action!=self.active:
+            self.detector=DetectorSession();self.sam=None;self.sam_key=None
+            gc.collect()
+            torch=sys.modules.get('torch')
+            if torch and torch.cuda.is_available():torch.cuda.empty_cache()
+            self.active=action
+        if action=='detect':return self.detector.detect(data,progress)
+        if action!='segment':raise ValueError('Unknown resident vision action')
+        import numpy as np
+        from sam_backend import SAM3Backend
+        path=Path(data['model']).resolve();stat=path.stat()
+        key=(str(path),stat.st_mtime_ns,stat.st_size,data['device'])
+        reused=self.sam is not None and self.sam_key==key
+        if not reused:
+            self.sam=None;gc.collect()
+            torch=sys.modules.get('torch')
+            if torch and torch.cuda.is_available():torch.cuda.empty_cache()
+            self.sam=SAM3Backend();self.sam.model_path=str(path)
+            self.sam.device='0' if data['device']=='cuda' else 'cpu';self.sam_key=key
+        progress('SAM3 正在复用引擎分割图像…' if reused else 'SAM3 首次加载模型与初始化设备…')
+        if data.get('text','').strip():_,masks=self.sam.process_text_prompt(data['path'],data['text'],data['conf'],data['iou'])
+        else:_,masks=self.sam.process_image(data['path'],data['points'],data['boxes'],data['conf'],data['iou'],labels=data['labels'])
+        np.savez_compressed(data['mask_file'],**{f'mask_{i}':mask for i,mask in enumerate(masks)})
+        execution=getattr(self.sam,'execution',dict(actual='unknown',evidence='unverified'))
+        return dict(masks=data['mask_file'],execution=execution,performance=dict(device=execution['actual'],gpu_name=execution.get('gpu_name'),model_reused=reused))
+
+
 def main():
     from album.core import save_json
-    session=DetectorSession()
+    session=VisionSession()
     def send(value):print('MEMIVO_DETECTION:'+json.dumps(value,ensure_ascii=False),flush=True)
     # Parent death closes the pipe; there is no network listener or global service.
     for line in sys.stdin:
@@ -55,7 +87,7 @@ def main():
         try:
             message=json.loads(line)
             request=json.loads(Path(message['request']).read_text(encoding='utf-8'))
-            result=session.detect(request['payload'],lambda text:send(dict(id=message['id'],progress=text)))
+            result=session.run(request.get('action','detect'),request['payload'],lambda text:send(dict(id=message['id'],progress=text)))
             save_json(request['result'],result)
             send(dict(id=message['id'],ok=True))
         except Exception:

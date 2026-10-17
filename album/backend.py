@@ -25,12 +25,22 @@ class FaceBackend:
         if provider not in ort.get_available_providers():
             raise RuntimeError(f'{provider} 不可用；检查 ONNX Runtime、CUDA、cuDNN。')
         providers = [provider, 'CPUExecutionProvider'] if device == 'cuda' else [provider]
+        import tempfile
+        self.profile_dir=tempfile.TemporaryDirectory(prefix='memivo-face-')
+        self.requested_device=device
+        self.profile_counts={}
+        self.on_execution=lambda report:None
         options = ort.SessionOptions()
+        options.enable_profiling=True
+        options.profile_file_prefix=str(Path(self.profile_dir.name)/'recognition')
         # Baseline uses one aligned face at a time; avoid multiple GPU sessions/jobs.
         self.session = ort.InferenceSession(str(recognition_path), sess_options=options, providers=providers)
         if device == 'cuda':
             self.session.disable_fallback()
-        self.detector = get_model(str(detector_path), providers=providers)
+        detector_options=ort.SessionOptions()
+        detector_options.enable_profiling=True
+        detector_options.profile_file_prefix=str(Path(self.profile_dir.name)/'detector')
+        self.detector = get_model(str(detector_path), providers=providers,sess_options=detector_options)
         if self.detector is None or getattr(self.detector, 'taskname', '') != 'detection':
             raise ValueError('人脸检测器需要 InsightFace 支持的 SCRFD ONNX 模型。')
         self.detector.prepare(ctx_id=0 if device == 'cuda' else -1,
@@ -60,6 +70,7 @@ class FaceBackend:
         boxes, landmarks = self.detector.detect(bgr, max_num=0)
         if len(boxes) and landmarks is None:
             raise ValueError('检测器未输出对齐所需的五个人脸关键点。')
+        self.capture_profile('detector',self.detector.session)
         faces = []
         for box, points in zip(boxes, landmarks if landmarks is not None else []):
             aligned = self.face_align.norm_crop(bgr, landmark=points, image_size=112)
@@ -67,6 +78,23 @@ class FaceBackend:
             tensor = aligned[:, :, ::-1].transpose(2, 0, 1)[None].astype(self.dtype)
             tensor = np.ascontiguousarray((tensor / self.dtype(255) - self.dtype(.5)) / self.dtype(.5))
             output = self.session.run(None, {self.input.name: tensor})[0]
+            self.capture_profile('recognition',self.session)
             faces.append({'bbox': box[:4].astype(float).tolist(),
                           'det_score': float(box[4]), 'embedding': unit(output).tolist()})
         return faces
+
+    def capture_profile(self, stage, session):
+        if stage not in self.profile_counts:
+            from desktop.execution import onnx_profile,face_execution
+            path=Path(session.end_profiling())
+            self.profile_counts[stage]=onnx_profile(path)
+            path.unlink(missing_ok=True)
+            self.on_execution(face_execution(self.requested_device,self.profile_counts))
+
+    def execution_report(self):
+        from desktop.execution import face_execution
+        self.capture_profile('detector',self.detector.session)
+        self.capture_profile('recognition',self.session)
+        result=face_execution(self.requested_device,self.profile_counts)
+        self.profile_dir.cleanup()
+        return result

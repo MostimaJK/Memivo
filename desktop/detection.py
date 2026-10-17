@@ -38,7 +38,9 @@ class YOLOBackend:
         results = self.model.predict(source=image, conf=conf, iou=iou,
                                      device=self.device, verbose=False, save=False)
         result = results[0]
-        actual=getattr(getattr(self.model,'predictor',None),'device',None)
+        from .execution import torch_execution,model_tensor_device
+        actual=model_tensor_device(getattr(self.model,'predictor',None))
+        self.execution=torch_execution('cuda' if self.device=='0' else 'cpu',actual,'detect')
         torch=sys.modules.get('torch')
         self.diagnostics=dict(device=str(actual) if actual is not None else 'unknown',
             torch_version=str(getattr(torch,'__version__','unknown')),

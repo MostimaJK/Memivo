@@ -6,6 +6,7 @@ https://docs.ultralytics.com/quickstart/
 No driver, CUDA toolkit, model weights or global Python installations are changed.
 """
 from collections import deque
+import copy
 import csv
 import io
 import json
@@ -103,6 +104,7 @@ class RuntimeManager:
         self.log_root.mkdir(exist_ok=True)
         self.last_log_file = ''
         self.last_failure = None
+        self.execution = None
         self.detection_worker = None
         try:
             self.last_failure = json.loads((self.log_root/'last-failure.json').read_text(encoding='utf-8'))
@@ -144,7 +146,7 @@ class RuntimeManager:
             return dict(hardware=self.hardware, engines=[dict(id=feature, **self.records.get(feature, {'state':'missing'}),
                        available=self.python_for(feature) is not None) for feature in FEATURES],
                        logs=list(self.logs), last_feature=self.last_feature, root=str(self.root),
-                       log_root=str(self.log_root), log_file=self.last_log_file, last_failure=self.last_failure)
+                       log_root=str(self.log_root), log_file=self.last_log_file, last_failure=self.last_failure,execution=self.execution)
 
     def log(self, line):
         with self.lock:
@@ -158,6 +160,7 @@ class RuntimeManager:
 
     def capture_exception(self, operation, error):
         """Keep diagnostics even for failures outside a managed subprocess."""
+        if self.execution and self.execution.get('evidence')=='pending':self.record_execution(dict(self.execution,evidence='failed'))
         if self.last_failure and self.last_failure.get('message') == str(error):
             return self.last_failure.get('log_file', '')
         path=self.log_root/(time.strftime('%Y%m%d-%H%M%S')+'-'+uuid.uuid4().hex[:10]+'-task.log')
@@ -168,6 +171,18 @@ class RuntimeManager:
             self.last_failure=failure
         save_json(self.log_root/'last-failure.json',failure)
         return str(path)
+
+    def begin_execution(self, operation, requested):
+        with self.lock:self.execution=dict(operation=operation,requested=requested,actual='unknown',evidence='pending',time=time.strftime('%H:%M:%S'))
+
+    def record_execution(self, report):
+        with self.lock:
+            self.execution=dict(copy.deepcopy(report),time=time.strftime('%H:%M:%S'))
+            line=json.dumps(self.execution,ensure_ascii=False)
+            self.log('MEMIVO_EXECUTION:'+line)
+            journal=self.log_root/'execution.jsonl'
+            if journal.exists() and journal.stat().st_size>2*1024*1024:journal.replace(self.log_root/'execution.previous.jsonl')
+            with journal.open('a',encoding='utf-8') as output:output.write(line+'\n')
 
     def scan(self):
         info = probe_hardware(self.root)
@@ -209,7 +224,10 @@ class RuntimeManager:
             for line in process.stdout:
                 output_log.write(line)
                 if line.strip():tail.append(line.strip())
-                if line.startswith('MEMIVO_PROGRESS:') and progress:
+                if line.startswith('MEMIVO_EXECUTION:'):
+                    try:self.record_execution(json.loads(line.removeprefix('MEMIVO_EXECUTION:')))
+                    except (ValueError,TypeError):self.log(line)
+                elif line.startswith('MEMIVO_PROGRESS:') and progress:
                     try:
                         progress(*json.loads(line.removeprefix('MEMIVO_PROGRESS:')))
                     except (ValueError, TypeError):
@@ -335,6 +353,7 @@ class RuntimeManager:
     def detect_job(self, python, payload, cancelled, progress):
         from .inference_worker import DetectionWorker
         self.last_feature='vision'
+        self.begin_execution('detect',payload['device'])
         if self.detection_worker is None:self.detection_worker=DetectionWorker(self)
         return self.detection_worker.request(python,payload,cancelled,progress)
 
@@ -347,11 +366,16 @@ class RuntimeManager:
             self.logs.clear()
             self.last_log_file=''
         device=payload.get('device',payload.get('config',{}).get('device',payload.get('options',{}).get('device','cpu')))
+        if action in ('segment','recognize','train','evaluate'):self.begin_execution(action,device)
         self.log(f'Engine: {feature}; action: {action}; device: {device}; profile: {self.records.get(feature,{}).get("profile")}')
         if device == 'cuda' and self.records.get(feature,{}).get('profile') != 'cu128':
             raise ValueError('当前引擎为 CPU 版，但执行设备设为 NVIDIA CUDA。请安装 NVIDIA 引擎，或在设置中改用 CPU。')
         if action=='detect':
             return self.detect_job(python,payload,cancelled,progress)
+        if action=='segment':
+            from .inference_worker import DetectionWorker
+            if self.detection_worker is None:self.detection_worker=DetectionWorker(self)
+            return self.detection_worker.request(python,payload,cancelled,progress,action='segment')
         # Release cached YOLO VRAM before SAM3, training, evaluation or face jobs.
         self.close_detection()
         with tempfile.TemporaryDirectory(prefix='job-',dir=self.root) as folder:

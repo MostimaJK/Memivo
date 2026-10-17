@@ -74,4 +74,18 @@ YOLO 現在使用獨立常駐程序，連續偵測同一權重／裝置時會重
 
 2026-10-17 本機檢驗：官方 YOLO26n、CPU、2400×1600 PNG，同一圖片；舊的逐張啟動流程 3 次中位數 4020 ms，改造後暖啟動 3 次中位數 75 ms，首次常駐偵測約 3207 ms。這是固定輸入的小型實驗，非精度評估、非 YOLO26l／RTX 5070 Ti 的 GPU 基準，不能推論所有圖片皆有相同速度。預設 .pt 推論精度與解析度不變，尚未導出 TensorRT 或啟用 FP16。
 
-參考：[Ultralytics Predict](https://docs.ultralytics.com/modes/predict/)、[官方 YOLO26 基準條件](https://docs.ultralytics.com/models/yolo26/)。SAM3 的模型／圖片特徵重用留待後續獨立優化。
+參考：[Ultralytics Predict](https://docs.ultralytics.com/modes/predict/)、[官方 YOLO26 基準條件](https://docs.ultralytics.com/models/yolo26/)。v0.3.8 已加入 SAM3 常駐模型及文字模式的同圖特徵重用；幾何模式仍會進行圖像編碼，未宣稱全部路徑皆重用圖像特徵。
+
+
+## v0.3.8 執行鏈路檢查與裝置證據
+
+- 全部工作區新增狀態列：分開顯示全域偏好、最近一次實際模型運算裝置、任務、時間及證據來源。尚未運行／初始化失敗不會顯示已驗證 GPU。這是最近任務的證據，不是即時 GPU 使用率；閒置釋放模型後仍可查看上次執行記錄。
+- YOLO、SAM3、訓練及評估從已載入模型的參數張量取得裝置；請求 CUDA 卻觀察到 CPU 會停止並報錯。
+- 人臉偵測及識別各自對第一次真正執行取樣 ONNX 節點配置，之後停止 profiling，避免每張圖片持續累積記錄。CUDA 下允許部分 CPU 形狀算子，但任一已執行模型全為 CPU 節點時拒絕回報 GPU 成功。兩者皆未執行、直接命中特徵快取時標示快取，不虛報 GPU 推論。
+- 診斷日誌包含相同結構化證據；檔案在應用資料目錄 `runtimes/logs/execution.jsonl`，超過約 2 MB 輪替一份備份。原始碼預設為 `.segmentflow/runtimes/logs/`，EXE 為 `%LOCALAPPDATA%/Memivo/data/runtimes/logs/`。
+- SAM3 改為與 YOLO 共用一個有監督的常駐程序，切換功能釋放上一模型，避免同時常駐兩套 GPU 模型；首次載入、功能切換及空閒回收後仍會冷啟動。文字模式調整提示／閾值不再重建模型，只有圖片改變時重算該模式的圖像特徵。
+- 正規化輸入只保留一張本機 PNG；同一來源未變更時不重寫，避免破壞特徵快取並避免累積大量輸入副本。輸出仍需寫入遮罩、去背及實例 PNG，這些 CPU／磁碟耗時仍然存在。
+- 新訓練預設跟隨全域裝置，可手動覆寫。恢復訓練維持原記錄的參數及裝置，介面明確說明。
+- 人臉整批使用同一模型，已有特徵快取，沒有逐張新建模型；訓練模型只在任務開始初始化，沒有逐 epoch 重載。
+
+檢查涵蓋主要 AI 呼叫與快取流程，不代表所有潛在錯誤已排除。本機已用真實 YOLO26n／CPU 及 ONNX CPU Conv 驗證裝置證據；SAM3 快取與裝置保護以明確測試替身驗證，完整 SAM3 權重、SCRFD／LVFace 組合、訓練及 RTX 5070 Ti CUDA 仍需目標設備整合驗證。
